@@ -21,6 +21,8 @@ conda install pytorch torchvision pytorch-cuda=12.4 -c pytorch -c nvidia/label/c
 - [x] try out the `torch.utils.cpp_extension.load` function
 - [x] Test loop for testing correctness and speed
 - [x] Write naive matmul kernel
+- [x] Write matmul kernel with output 
+- [ ] fix compile errors not being shown in vscode notebook
 - [ ] Write tiled matmul kernel
 - [ ] Write naive attention kernel
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 

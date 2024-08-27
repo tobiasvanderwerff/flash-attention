@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <c10/cuda/CUDAException.h>
 
-#define TILE_SIZE 16  // TODO: convert to consexpr
+constexpr int TILE_SIZE = 16;
 
 #define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
 #define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
@@ -41,29 +41,45 @@ __global__ void matmul_kernel_1(float* out, const float* A, const float* B, int 
     out[r*w + c] = sum;
 }
 
-__global__ void matmul_kernel_2(float* out, const float* A, const float* B, int h, int w, int k) {
-    /* Matmul using tiling */
+// __global__ void matmul_kernel_2(float* out, const float* A, const float* B, int h, int w, int k) {
+//     /* Matmul using tiling */
 
-    __shared__ float A_tile[TILE_SIZE][TILE_SIZE];
-    __shared__ float B_tile[TILE_SIZE][TILE_SIZE];
+//     __shared__ float A_tile[TILE_SIZE][TILE_SIZE];
+//     __shared__ float B_tile[TILE_SIZE][TILE_SIZE];
 
-    const int tx = threadIdx.x;
-    const int ty = threadIdx.y;
-    const int bx = blockIdx.x;
-    const int by = blockIdx.y;
+//     const int tx = threadIdx.x;
+//     const int ty = threadIdx.y;
+//     const int bx = blockIdx.x;
+//     const int by = blockIdx.y;
 
-    const int r = blockDim.y * by + ty;  // row
-    const int c = blockDim.x * bx + tx;  // col
-    const int idx = r * w + c;
+//     const int r = blockDim.y * by + ty;  // row
+//     const int c = blockDim.x * bx + tx;  // col
+//     const int idx = r * w + c;
 
-    // TODO
-}
+//     // TODO
+// }
 
 /* 
 ====================================  C++ ==================================== 
 */
 
 inline unsigned int cdiv(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
+
+torch::Tensor matmul_out(torch::Tensor& out, const torch::Tensor& A, const torch::Tensor& B) {
+    CHECK_INPUT(A); CHECK_INPUT(B); CHECK_INPUT(out);
+    int h = A.size(0);
+    int w = B.size(1);
+    int k = A.size(1);
+    TORCH_CHECK(k == B.size(0) && out.sizes() == std::vector<int64_t>({h, w}), "Size mismatch!");
+    TORCH_CHECK(out.scalar_type() == A.scalar_type() && out.scalar_type() == B.scalar_type(), "Scalar type mismatch!");
+
+    dim3 bdim(16, 16);
+    dim3 gdim(cdiv(w, bdim.x), cdiv(h, bdim.y));
+    matmul_kernel_1<<<gdim, bdim>>>(
+        out.data_ptr<float>(), A.data_ptr<float>(), B.data_ptr<float>(), h, w, k);
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+    return out;
+}
 
 torch::Tensor matmul(const torch::Tensor& A, const torch::Tensor& B) {
     CHECK_INPUT(A); CHECK_INPUT(B);

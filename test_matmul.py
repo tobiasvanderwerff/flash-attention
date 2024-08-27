@@ -23,20 +23,26 @@ cpp_src = cpp_path.read_text()
 
 # Compile
 start_time = time.time()
-module = load_cuda_inline(cuda_src, cpp_src, funcs, verbose=True, opt=True)
-print(f"Compilation time: {(time.time()-start_time):.2f} s")
+module = load_cuda_inline(cuda_src, cpp_src, funcs, verbose=True, opt=True, build_directory="./build")
+print(f"Compilation time: {(time.time()-start_time):.2f} s\n")
 
 # Check correctness
 torch.manual_seed(1)
-n = 1000
-m1 = torch.randn(n, n, device="cuda")
-m2 = torch.randn(n, n, device="cuda")
-res = module.matmul(m1, m2)
-tr = torch.matmul(m1, m2).cpu()
-is_correct = torch.isclose(res.cpu(), tr, atol=1e-4).all().item()
+test_sizes = [(1024, 1024), (1024, 1000), (999, 999)]
+is_correct = True
+for a, b in test_sizes:
+    m1 = torch.randn(a, b, device="cuda")
+    m2 = torch.randn(b, a, device="cuda")
+    res = module.matmul(m1, m2)
+    tr = torch.matmul(m1, m2).cpu()
+    is_correct &= torch.isclose(res.cpu(), tr, atol=1e-4).all().item()
+    print(f"Max diff: {(res.cpu()-tr).abs().max().item()}")
 
-print(f"\nMax diff: {(res.cpu()-tr).abs().max().item()}")
-print(f"Correct result: {is_correct}\n")
+print(f"\nTest cases passed: {is_correct}\n")
+
+m1 = torch.randn(1024, 1024, device="cuda")
+m2 = torch.randn(1024, 1024, device="cuda")
+res = torch.zeros_like(m1)
 
 # Benchmark
 print("Benchmarking...")

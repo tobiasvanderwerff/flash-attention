@@ -1,8 +1,6 @@
 """
 Run this file to test if Torch/CUDA has been installed correctly. 
 If there are no errors, it's probably working.
-
-Source: https://github.com/pbridger/cuda-experiments/blob/main/main.py
 """
 
 import os, sys

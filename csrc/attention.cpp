@@ -1,0 +1,1 @@
+torch::Tensor matmul(const torch::Tensor& A, const torch::Tensor& B);

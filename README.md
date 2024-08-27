@@ -18,11 +18,10 @@ conda install pytorch torchvision pytorch-cuda=12.4 -c pytorch -c nvidia/label/c
 
 ## TODO
 
-TODO
 - [x] try out the `torch.utils.cpp_extension.load` function
-- [ ] Test loop for testing correctness and speed
-- [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 
-- [ ] Compute PyTorch attention as ground truth (in Python, ideally)
-- [ ] Write matmul kernel
+- [x] Test loop for testing correctness and speed
+- [x] Write naive matmul kernel
+- [ ] Write tiled matmul kernel
 - [ ] Write naive attention kernel
+- [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 
 

@@ -1,9 +1,11 @@
 from torch.utils.cpp_extension import load_inline, load
 
 
-def load_cuda_inline(cuda_src, cpp_src, funcs, opt=False, verbose=False, build_directory=None):
+def load_cuda_inline(cuda_src, cpp_src, funcs, opt=False, verbose=False, build_directory=None, name=None):
+    if name is None:
+        name = funcs[0]
     return load_inline(cuda_sources=[cuda_src], cpp_sources=[cpp_src], functions=funcs,
-                       extra_cuda_cflags=["-O2"] if opt else [], verbose=verbose, name="inline_ext",
+                       extra_cuda_cflags=["-O2"] if opt else [], verbose=verbose, name=name,
                        build_directory=build_directory)
 
 

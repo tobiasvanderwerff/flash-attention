@@ -73,3 +73,4 @@ void launch_matmul_kernel(dim3 gdim, dim3 bdim, float* out, const float* A, cons
 }
 
 template void launch_matmul_kernel<16>(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 
+template void launch_matmul_kernel<32>(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 

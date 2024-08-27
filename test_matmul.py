@@ -60,6 +60,7 @@ if is_correct:
     t1 = time.perf_counter_ns()
     print(f"Time: {(t1-t0)/iters/1e3:.2f} µs")
 
+    """
     print("\nRunning PyTorch profiler...")
     with torch.profiler.profile() as prof:
         for i in range(iters):
@@ -67,3 +68,4 @@ if is_correct:
             torch.cuda.synchronize()
 
     print(prof.key_averages().table())
+    """

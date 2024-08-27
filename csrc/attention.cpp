@@ -2,10 +2,20 @@
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAException.h>
 #include <torch/extension.h>
+#include <iostream>
 
 #define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
 #define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
 #define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
+#define CUDA_ERR(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
 
 template <int TILE_SIZE>
 void launch_matmul_kernel(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 
@@ -35,10 +45,35 @@ torch::Tensor matmul(const torch::Tensor& A, const torch::Tensor& B) {
     TORCH_CHECK(k==B.size(0), "Size mismatch!");
     auto out = torch::zeros({h, w}, A.options());
 
-    dim3 bdim(16, 16);
+    /*
+    cudaDeviceProp devProp;
+    CUDA_ERR(cudaGetDeviceProperties(&devProp, 0));
+    int maxThreads = devProp.maxThreadsPerBlock;
+    // Dynamicly calculated shared memory size
+    size_t requiredSize = static_cast(maxThreads) * 2 * sizeof(float);
+    size_t size = min(devProp.sharedMemPerBlock, requiredSize);
+    int TW = std::sqrt(maxThreads);
+    std::cout << "Shared memory size: " << devProp.sharedMemPerBlock << std::endl;
+    std::cout << "Max threads per block: " << maxThreads << std::endl;
+    */
+
+    const int tile_size = 16;
+
+    dim3 bdim(tile_size, tile_size);
     dim3 gdim(cdiv(w, bdim.x), cdiv(h, bdim.y));
-    launch_matmul_kernel<16>(
+
+    auto f = [&](auto kf) { kf(
         gdim, bdim, out.data_ptr<float>(), A.data_ptr<float>(), B.data_ptr<float>(), h, w, k); 
+    };
+
+    switch(tile_size) {
+        case 16:
+            f(launch_matmul_kernel<16>); break;
+        case 32:
+            f(launch_matmul_kernel<32>); break;
+        default:
+            TORCH_CHECK(false, "Unsupported tile size: ", tile_size);
+    }
     return out;
 }
 

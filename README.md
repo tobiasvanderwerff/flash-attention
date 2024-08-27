@@ -33,8 +33,8 @@ conda install pytorch torchvision pytorch-cuda=12.4 -c pytorch -c nvidia/label/c
 - [x] Write naive matmul kernel
 - [x] Write matmul kernel with output 
 - [x] Write tiled matmul kernel
+- [x] Make compilation faster. It currently takes 45-50 seconds each time...
 - [ ] Write naive attention kernel
-- [ ] Make compilation faster. It currently takes 45-50 seconds each time...
-- [ ] fix compile errors not being shown in vscode notebook
+- [ ] Triton?
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 
 

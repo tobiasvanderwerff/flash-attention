@@ -65,8 +65,11 @@ __global__ void matmul_kernel_2(float* out, const float* A, const float* B, int 
         out[r*w + c] = sum;
 }
 
+template <int TILE_SIZE>
 void launch_matmul_kernel(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k) {
-    // TODO: check if gdim and bdim match with the template parameter?
-    matmul_kernel_2<16><<<gdim, bdim>>>(out, A, B, h, w, k);
+    // matmul_kernel_1<<<gdim, bdim>>>(out, A, B, h, w, k);
+    matmul_kernel_2<TILE_SIZE><<<gdim, bdim>>>(out, A, B, h, w, k);
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
+
+template void launch_matmul_kernel<16>(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 

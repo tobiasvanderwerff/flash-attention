@@ -7,6 +7,8 @@ import torch
 from util import load_cuda, load_cuda_inline
 
 # Set environment variables
+os.environ['CXX'] = '/usr/lib/ccache/g++'
+os.environ['CC'] = '/usr/lib/ccache/gcc'
 os.environ['CUDA_LAUNCH_BLOCKING']='1'
 device_props = torch.cuda.get_device_properties(0)
 os.environ['TORCH_CUDA_ARCH_LIST'] = f'{device_props.major}.{device_props.minor}'
@@ -23,7 +25,8 @@ cpp_src = cpp_path.read_text()
 
 # Compile
 start_time = time.time()
-module = load_cuda_inline(cuda_src, cpp_src, funcs, verbose=True, opt=True, build_directory="./build")
+# module = load_cuda_inline(cuda_src, cpp_src, funcs, verbose=True, opt=True, build_directory="./build")
+module = load_cuda([cu_path, cpp_path], verbose=True, opt=True)
 print(f"Compilation time: {(time.time()-start_time):.2f} s\n")
 
 # Check correctness
@@ -40,12 +43,13 @@ for a, b in test_sizes:
 
 print(f"\nTest cases passed: {is_correct}\n")
 
-m1 = torch.randn(1024, 1024, device="cuda")
-m2 = torch.randn(1024, 1024, device="cuda")
+n = 1024
+m1 = torch.randn(n, n, device="cuda")
+m2 = torch.randn(n, n, device="cuda")
 res = torch.zeros_like(m1)
 
 # Benchmark
-print("Benchmarking...")
+print(f"Benchmarking {n}x{n} matrix...")
 if is_correct:
     iters = 1000
     torch.cuda.synchronize()

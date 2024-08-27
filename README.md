@@ -4,6 +4,15 @@ An implementation of flash attention, for learning purposes.
 
 ## Setup
 
+Install `ccache` (used for faster compilation by using caching):
+
+```shell
+sudo apt update
+sudo apt install software-properties-common ccache
+```
+
+Install dependencies:
+
 ```shell
 conda create -n flash-attention
 conda activate flash-attention
@@ -24,8 +33,8 @@ conda install pytorch torchvision pytorch-cuda=12.4 -c pytorch -c nvidia/label/c
 - [x] Write naive matmul kernel
 - [x] Write matmul kernel with output 
 - [x] Write tiled matmul kernel
-- [ ] Make compilation faster. It currently takes 45-50 seconds each time...
 - [ ] Write naive attention kernel
+- [ ] Make compilation faster. It currently takes 45-50 seconds each time...
 - [ ] fix compile errors not being shown in vscode notebook
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 
 

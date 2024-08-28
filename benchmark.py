@@ -32,8 +32,8 @@ module = load_and_compile_sources(Path("csrc"), verbose=False)
 
 
 # Benchmark matmul
-print("\nBenchmarking matmul...")
 n = 1024
+print(f"\nBenchmarking matmul ({n}x{n})...")
 m1 = torch.randn(n, n, device="cuda")
 m2 = torch.randn(n, n, device="cuda")
 out = torch.zeros_like(m1)
@@ -41,7 +41,8 @@ benchmark(module.matmul_out, out, m1, m2)
 
 
 # Benchmark softmax
-print("\nBenchmarking softmax...")
 n = 1024
+print(f"\nBenchmarking softmax ({n}x{n})...")
+# x = torch.randn(n, n, device="cuda")
 x = torch.randn(n, n, device="cuda")
 benchmark(module.softmax, x)

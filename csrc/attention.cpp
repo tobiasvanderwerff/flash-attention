@@ -103,8 +103,16 @@ torch::Tensor softmax(const torch::Tensor& inp) {
     };
 
     switch(block_size) {
+        case 64:
+            f(launch_softmax_kernel<64>); break;
+        case 128:
+            f(launch_softmax_kernel<128>); break;
         case 256:
             f(launch_softmax_kernel<256>); break;
+        case 512:
+            f(launch_softmax_kernel<512>); break;
+        case 1024:
+            f(launch_softmax_kernel<1024>); break;
         default:
             TORCH_CHECK(false, "Unsupported block size: ", block_size);
     }

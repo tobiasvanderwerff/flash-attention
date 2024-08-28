@@ -87,15 +87,15 @@ __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
     int bx = blockIdx.x;
 
     // Thread coarsening
-    float sum = 0;
+    float sum = 0.0f;
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) {
         int idx = bx*w + bi*BLOCK_SIZE + tx;
         if (bi*BLOCK_SIZE + tx < w) {
             float e = expf(inp[idx]);  // TODO: use __expf?
-            out[idx] = e; // TODO: consider: do not save but recalculate at L. 116 (test perf. to verify if it makes sense)
+            out[idx] = e;
             shm_sum[tx] = e;
         } else {
-            shm_sum[tx] = 0;
+            shm_sum[tx] = 0.0f;
         }
 
         // TODO: use padding to allow for non-powers of 2 block sizes? 
@@ -111,6 +111,7 @@ __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
         __syncthreads();
     }
 
+    // Thread coarsening
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) {
         if (bi*BLOCK_SIZE + tx < w) 
             out[bx*w + bi*BLOCK_SIZE + tx] /= sum;
@@ -123,7 +124,11 @@ void launch_softmax_kernel(int gdim, int bdim, float* out, const float* inp, int
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
+template void launch_softmax_kernel<64>(int gdim, int bdim, float* out, const float* inp, int h, int w);
+template void launch_softmax_kernel<128>(int gdim, int bdim, float* out, const float* inp, int h, int w);
 template void launch_softmax_kernel<256>(int gdim, int bdim, float* out, const float* inp, int h, int w);
+template void launch_softmax_kernel<512>(int gdim, int bdim, float* out, const float* inp, int h, int w);
+template void launch_softmax_kernel<1024>(int gdim, int bdim, float* out, const float* inp, int h, int w);
 
 
 // __global__ void attention_1() {

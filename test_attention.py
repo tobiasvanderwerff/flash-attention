@@ -25,8 +25,7 @@ def test_matmul_kernel(h, w, k):
 
 
 @pytest.mark.parametrize(
-    "h,w", [(256, 256)]
-    # "h,w", [(128, 128), (99, 99), (100, 2048), (100, 2047)]
+    "h,w", [(256, 256), (99, 99), (100, 2048), (100, 2047)]
 )
 def test_softmax_kernel(h, w):
     torch.manual_seed(1)

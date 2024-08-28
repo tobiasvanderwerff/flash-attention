@@ -28,13 +28,13 @@ def set_env_vars():
 
     print(f"TORCH_CUDA_ARCH_LIST: {os.environ.get('TORCH_CUDA_ARCH_LIST')}")
 
-def load_and_compile_sources(src_dir):
+def load_and_compile_sources(src_dir, verbose=True):
     # Load sources
     src = [p for p in src_dir.iterdir() if p.suffix == ".cu" or p.suffix == ".cpp"]
     print(f"Found sources: {[str(p) for p in src]}\n")
 
     # Compile
     start_time = time.time()
-    module = load_cuda(src, verbose=True, opt=True)
+    module = load_cuda(src, verbose=verbose, opt=True)
     print(f"Compilation time: {(time.time()-start_time):.2f} s\n")
     return module

@@ -17,6 +17,11 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
+bool is_power_of_two(int n) {
+    if (n <= 0) return false;
+    return (n & (n - 1)) == 0;
+}
+
 inline unsigned int cdiv(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
 template <int TILE_SIZE>
@@ -89,7 +94,9 @@ torch::Tensor softmax(const torch::Tensor& inp) {
     auto out = torch::zeros({h, w}, inp.options());
 
     const int block_size = 256;
-    const int blocks = cdiv(h*w, block_size);
+    const int blocks = h;
+
+    TORCH_CHECK(is_power_of_two(block_size), "Block size is expected to be a power of 2. Got ", block_size);
 
     auto f = [&](auto kf) { kf(
         blocks, block_size, out.data_ptr<float>(), inp.data_ptr<float>(), h, w); 

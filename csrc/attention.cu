@@ -72,6 +72,7 @@ void launch_matmul_kernel(dim3 gdim, dim3 bdim, float* out, const float* A, cons
 template void launch_matmul_kernel<16>(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 
 template void launch_matmul_kernel<32>(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 
 
+__device__ inline unsigned int cdiv(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
 template <int BLOCK_SIZE>
 __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
@@ -79,32 +80,41 @@ __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
 
     // V1: assume a single block handles one row
 
-    __shared__ float shm[BLOCK_SIZE];  // TODO: is this optimal shmem size? 
     __shared__ float shm_sum[BLOCK_SIZE];  // TODO: is this optimal shmem size? 
     // TODO: could also use a single shm (shm_sum) and replace shm with write to global memmory.
 
-    int col = threadIdx.x;
-    int row = blockIdx.x;
-    int idx = row * blockDim.x + col;
+    int tx = threadIdx.x;
+    int bx = blockIdx.x;
 
-    // TODO: shared memory
-    if (idx < h*w) {
-        float e = expf(inp[idx]);  // TODO: use __expf?
-        shm[col] = e;
-        shm_sum[col] = e;
-    } // else 0?
+    // Thread coarsening
+    float sum = 0;
+    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) {
+        int idx = bx*w + bi*BLOCK_SIZE + tx;
+        if (bi*BLOCK_SIZE + tx < w) {
+            float e = expf(inp[idx]);  // TODO: use __expf?
+            out[idx] = e; // TODO: consider: do not save but recalculate at L. 116 (test perf. to verify if it makes sense)
+            shm_sum[tx] = e;
+        } else {
+            shm_sum[tx] = 0;
+        }
 
-    // Assume row width is power of 2
-    // TODO: use padding?
-    __syncthreads();  // TODO: sync only with other threads in row?
-    for (int stride = w >> 1; stride >= 1; stride >>= 1) {
-        if (col < stride)
-            shm_sum[col] += shm_sum[col + stride];
-        __syncthreads();  // TODO: sync only with other threads in row?
+        // TODO: use padding to allow for non-powers of 2 block sizes? 
+        __syncthreads();
+        for (int stride = BLOCK_SIZE >> 1; stride >= 1; stride >>= 1) {
+            if (tx < stride)
+                shm_sum[tx] += shm_sum[tx + stride];
+            __syncthreads();
+        }
+
+        // Let all threads save the intermediate sum
+        sum += shm_sum[0];
+        __syncthreads();
     }
 
-    if (idx < h*w) 
-        out[idx] = shm[col] / shm_sum[0];
+    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) {
+        if (bi*BLOCK_SIZE + tx < w) 
+            out[bx*w + bi*BLOCK_SIZE + tx] /= sum;
+    }
 }
 
 template <int BLOCK_SIZE>

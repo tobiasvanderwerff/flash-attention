@@ -17,10 +17,14 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
+inline unsigned int cdiv(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
+
 template <int TILE_SIZE>
 void launch_matmul_kernel(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 
 
-inline unsigned int cdiv(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
+template <int BLOCK_SIZE>
+void launch_softmax_kernel(int gdim, int bdim, float* out, const float* inp, int h, int w); 
+
 
 torch::Tensor matmul_out(torch::Tensor& out, const torch::Tensor& A, const torch::Tensor& B) {
     CHECK_INPUT(A); CHECK_INPUT(B); CHECK_INPUT(out);
@@ -77,7 +81,31 @@ torch::Tensor matmul(const torch::Tensor& A, const torch::Tensor& B) {
     return out;
 }
 
+
+torch::Tensor softmax(const torch::Tensor& inp) {
+    CHECK_INPUT(inp);
+    int h = inp.size(0);
+    int w = inp.size(1);
+    auto out = torch::zeros({h, w}, inp.options());
+
+    const int block_size = 256;
+    const int blocks = cdiv(h*w, block_size);
+
+    auto f = [&](auto kf) { kf(
+        blocks, block_size, out.data_ptr<float>(), inp.data_ptr<float>(), h, w); 
+    };
+
+    switch(block_size) {
+        case 256:
+            f(launch_softmax_kernel<256>); break;
+        default:
+            TORCH_CHECK(false, "Unsupported block size: ", block_size);
+    }
+    return out;
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 m.def("matmul", torch::wrap_pybind_function(matmul), "matmul");
 m.def("matmul_out", torch::wrap_pybind_function(matmul_out), "matmul_out");
+m.def("softmax", torch::wrap_pybind_function(softmax), "softmax");
 }

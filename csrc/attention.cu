@@ -18,9 +18,6 @@
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAException.h>
 
-// __global__ void attention_1() {
-//     /* Naive attention implementation (no flash attention) */
-// }
 
 __global__ void matmul_kernel_1(float* out, const float* A, const float* B, int h, int w, int k) {
     /* Naive matmul*/
@@ -74,3 +71,51 @@ void launch_matmul_kernel(dim3 gdim, dim3 bdim, float* out, const float* A, cons
 
 template void launch_matmul_kernel<16>(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 
 template void launch_matmul_kernel<32>(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 
+
+
+template <int BLOCK_SIZE>
+__global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
+    /* Softmax applied row-wise. */
+
+    // V1: assume a single block handles one row
+
+    __shared__ float shm[BLOCK_SIZE];  // TODO: is this optimal shmem size? 
+    __shared__ float shm_sum[BLOCK_SIZE];  // TODO: is this optimal shmem size? 
+    // TODO: could also use a single shm (shm_sum) and replace shm with write to global memmory.
+
+    int col = threadIdx.x;
+    int row = blockIdx.x;
+    int idx = row * blockDim.x + col;
+
+    // TODO: shared memory
+    if (idx < h*w) {
+        float e = expf(inp[idx]);  // TODO: use __expf?
+        shm[col] = e;
+        shm_sum[col] = e;
+    } // else 0?
+
+    // Assume row width is power of 2
+    // TODO: use padding?
+    __syncthreads();  // TODO: sync only with other threads in row?
+    for (int stride = w >> 1; stride >= 1; stride >>= 1) {
+        if (col < stride)
+            shm_sum[col] += shm_sum[col + stride];
+        __syncthreads();  // TODO: sync only with other threads in row?
+    }
+
+    if (idx < h*w) 
+        out[idx] = shm[col] / shm_sum[0];
+}
+
+template <int BLOCK_SIZE>
+void launch_softmax_kernel(int gdim, int bdim, float* out, const float* inp, int h, int w) { 
+    softmax_kernel<BLOCK_SIZE><<<gdim, bdim>>>(out, inp, h, w);
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+template void launch_softmax_kernel<256>(int gdim, int bdim, float* out, const float* inp, int h, int w);
+
+
+// __global__ void attention_1() {
+//     /* Naive attention implementation (no flash attention) */
+// }

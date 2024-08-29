@@ -13,22 +13,37 @@ __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
     In this kernel, each block handles a single row.
     */
 
-    __shared__ float shm_sum[BLOCK_SIZE];
+    __shared__ float shm[BLOCK_SIZE];
 
-    int tx = threadIdx.x;
-    int bx = blockIdx.x;
+    const int tx = threadIdx.x;
+    const int bx = blockIdx.x;
+
+    // Calculate max value of the row
+    float max_val = -INFINITY;
+    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
+        int col = bi*BLOCK_SIZE + tx;
+        shm[tx] = (col < w) ? inp[bx*w + col] : -INFINITY;
+
+        __syncthreads();
+        for (int stride = BLOCK_SIZE >> 1; stride >= 1; stride >>= 1) {
+            if (tx < stride)
+                shm[tx] = fmaxf(shm[tx], shm[tx + stride]);
+            __syncthreads();
+        }
+
+        max_val = fmaxf(max_val, shm[0]);
+    }
 
     float sum = 0.0f;
-    // Thread coarsening
-    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) {
+    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
         // Calculate exponent element-wise
         int idx = bx*w + bi*BLOCK_SIZE + tx;
         if (bi*BLOCK_SIZE + tx < w) {
-            float e = expf(inp[idx]);  // TODO: use __expf?
+            float e = expf(inp[idx] - max_val);  // TODO: use __expf?
             out[idx] = e;
-            shm_sum[tx] = e;
+            shm[tx] = e;
         } else {
-            shm_sum[tx] = 0.0f;
+            shm[tx] = 0.0f;
         }
 
         // Calculate sum of exponents
@@ -36,17 +51,17 @@ __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
         __syncthreads();
         for (int stride = BLOCK_SIZE >> 1; stride >= 1; stride >>= 1) {
             if (tx < stride)
-                shm_sum[tx] += shm_sum[tx + stride];
+                shm[tx] += shm[tx + stride];
             __syncthreads();
         }
 
         // Let all threads save the intermediate sum
-        sum += shm_sum[0];
+        sum += shm[0];
         __syncthreads();
     }
 
     // Divide by exponent sum
-    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) {
+    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
         if (bi*BLOCK_SIZE + tx < w) 
             out[bx*w + bi*BLOCK_SIZE + tx] /= sum;
     }

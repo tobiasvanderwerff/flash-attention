@@ -81,7 +81,6 @@ __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
     // V1: assume a single block handles one row
 
     __shared__ float shm_sum[BLOCK_SIZE];  // TODO: is this optimal shmem size? 
-    // TODO: could also use a single shm (shm_sum) and replace shm with write to global memmory.
 
     int tx = threadIdx.x;
     int bx = blockIdx.x;
@@ -130,7 +129,3 @@ template void launch_softmax_kernel<256>(int gdim, int bdim, float* out, const f
 template void launch_softmax_kernel<512>(int gdim, int bdim, float* out, const float* inp, int h, int w);
 template void launch_softmax_kernel<1024>(int gdim, int bdim, float* out, const float* inp, int h, int w);
 
-
-// __global__ void attention_1() {
-//     /* Naive attention implementation (no flash attention) */
-// }

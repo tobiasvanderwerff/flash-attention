@@ -31,7 +31,7 @@ template <int BLOCK_SIZE>
 void launch_softmax_kernel(int gdim, int bdim, float* out, const float* inp, int h, int w); 
 
 
-torch::Tensor matmul_out(torch::Tensor& out, const torch::Tensor& A, const torch::Tensor& B) {
+torch::Tensor my_matmul_out(torch::Tensor& out, const torch::Tensor& A, const torch::Tensor& B) {
     CHECK_INPUT(A); CHECK_INPUT(B); CHECK_INPUT(out);
     int h = A.size(0);
     int w = B.size(1);
@@ -46,7 +46,7 @@ torch::Tensor matmul_out(torch::Tensor& out, const torch::Tensor& A, const torch
     return out;
 }
 
-torch::Tensor matmul(const torch::Tensor& A, const torch::Tensor& B) {
+torch::Tensor my_matmul(const torch::Tensor& A, const torch::Tensor& B) {
     CHECK_INPUT(A); CHECK_INPUT(B);
     int h = A.size(0);
     int w = B.size(1);
@@ -87,7 +87,7 @@ torch::Tensor matmul(const torch::Tensor& A, const torch::Tensor& B) {
 }
 
 
-torch::Tensor softmax(const torch::Tensor& inp) {
+torch::Tensor my_softmax(const torch::Tensor& inp) {
     CHECK_INPUT(inp);
     int h = inp.size(0);
     int w = inp.size(1);
@@ -119,8 +119,34 @@ torch::Tensor softmax(const torch::Tensor& inp) {
     return out;
 }
 
+torch::Tensor my_attention(const torch::Tensor& Q, const torch::Tensor& K, const torch::Tensor& V) {
+    /* Naive attention implementation (no flash attention) 
+
+        Require: Matrices Q, K, V ∈ R^N×d in HBM.
+        1: Load Q, K by blocks from HBM, compute S = QK^T , write S to HBM.
+        2: Read S from HBM, compute P = softmax(S), write P to HBM.
+        3: Load P and V by blocks from HBM, compute O = PV, write O to HBM.
+        4: Return O
+    */
+    CHECK_INPUT(Q); CHECK_INPUT(K); CHECK_INPUT(V);
+
+    int n = Q.size(0);
+    int d = Q.size(1);
+
+    TORCH_CHECK(d == K.size(0) && n == K.size(1) &&
+                n == V.size(0) && d == V.size(1), "Wrong sizes!");
+
+    auto QK = my_matmul(Q, K);
+    auto weights = my_softmax(QK);
+    auto out = my_matmul(weights, V);
+
+    return out;
+}
+
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-m.def("matmul", torch::wrap_pybind_function(matmul), "matmul");
-m.def("matmul_out", torch::wrap_pybind_function(matmul_out), "matmul_out");
-m.def("softmax", torch::wrap_pybind_function(softmax), "softmax");
+m.def("my_matmul", torch::wrap_pybind_function(my_matmul), "my_matmul");
+m.def("my_matmul_out", torch::wrap_pybind_function(my_matmul_out), "my_matmul_out");
+m.def("my_softmax", torch::wrap_pybind_function(my_softmax), "my_softmax");
+m.def("my_attention", torch::wrap_pybind_function(my_attention), "my_attention");
 }

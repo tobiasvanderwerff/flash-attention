@@ -2,34 +2,14 @@
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAException.h>
 #include <torch/extension.h>
-#include <iostream>
+#include "util.hpp"
 
-#define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
-#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
-#define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
-#define CUDA_ERR(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-   if (code != cudaSuccess) 
-   {
-      fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
-
-bool is_power_of_two(int n) {
-    if (n <= 0) return false;
-    return (n & (n - 1)) == 0;
-}
-
-inline unsigned int cdiv(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
 template <int TILE_SIZE>
 void launch_matmul_kernel(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 
 
 template <int BLOCK_SIZE>
 void launch_softmax_kernel(int gdim, int bdim, float* out, const float* inp, int h, int w); 
-
 
 torch::Tensor my_matmul_out(torch::Tensor& out, const torch::Tensor& A, const torch::Tensor& B) {
     CHECK_INPUT(A); CHECK_INPUT(B); CHECK_INPUT(out);
@@ -93,6 +73,9 @@ torch::Tensor my_softmax(const torch::Tensor& inp) {
     int w = inp.size(1);
     auto out = torch::zeros({h, w}, inp.options());
 
+    // For better occupancy on matrices with smaller rows, it would probably be
+    // best to choose the block size to be the next power of 2 from the matrix
+    // width.
     const int block_size = 256;
     const int blocks = h;
 
@@ -143,10 +126,9 @@ torch::Tensor my_attention(const torch::Tensor& Q, const torch::Tensor& K, const
     return out;
 }
 
-
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-m.def("my_matmul", torch::wrap_pybind_function(my_matmul), "my_matmul");
-m.def("my_matmul_out", torch::wrap_pybind_function(my_matmul_out), "my_matmul_out");
 m.def("my_softmax", torch::wrap_pybind_function(my_softmax), "my_softmax");
 m.def("my_attention", torch::wrap_pybind_function(my_attention), "my_attention");
+m.def("my_matmul", torch::wrap_pybind_function(my_matmul), "my_matmul");
+m.def("my_matmul_out", torch::wrap_pybind_function(my_matmul_out), "my_matmul_out");
 }

@@ -58,8 +58,9 @@ python test_matmul.py
 - [x] Write tiled matmul kernel
 - [x] Make compilation faster. It currently takes 45-50 seconds each time...
 - [x] Write softmax kernel
-- [ ] Write naive attention kernel
+- [x] Write naive attention kernel
     - [ ] use/write transpose matmul kernel instead of assuming that K is passed already transposed
+- [ ] Start with flash attention implementation
 - [ ] Look for ways to optimize softmax kernel
 - [ ] See what solution chatgpt comes up with for softmax kernel
 - [ ] Try out Nsight profiler to get insight into performance bottlenecks

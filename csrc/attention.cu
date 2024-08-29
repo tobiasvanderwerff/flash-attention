@@ -44,8 +44,8 @@ __global__ void matmul_kernel_2(float* out, const float* A, const float* B, int 
 
     const int tx = threadIdx.x;
     const int ty = threadIdx.y;
-    const int r = blockDim.y * blockIdx.x + ty;  // row
-    const int c = blockDim.x * blockIdx.y + tx;  // col
+    const int r = blockDim.y * blockIdx.y + ty;  // row
+    const int c = blockDim.x * blockIdx.x + tx;  // col
 
     float sum = 0.0f;
     for (int ti = 0; ti < (k+TILE_SIZE-1)/TILE_SIZE; ++ti) {

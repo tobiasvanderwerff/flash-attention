@@ -60,9 +60,10 @@ python test_matmul.py
 - [x] Write softmax kernel
 - [x] Write naive attention kernel
 - [x] See what solution chatgpt comes up with for softmax kernel
-    - [ ] use/write transpose matmul kernel instead of assuming that K is passed already transposed
-- [ ] Start with flash attention implementation
+- [x] Python impl of flash attention
+- [ ] C++ impl of flash attention
 - [ ] Look for ways to optimize softmax kernel
+- [ ] Write transpose matmul kernel
 - [ ] Try out Nsight profiler to get insight into performance bottlenecks
 - [ ] Triton?
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 

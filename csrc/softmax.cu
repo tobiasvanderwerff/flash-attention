@@ -11,9 +11,9 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
 }
 
 __inline__ __device__ void warp_reduce_sum(float* out, float val) {
-    for (int stride = 1; stride < warpSize, stride *= 2)
+    for (int stride = 1; stride < warpSize; stride *= 2)
         val += __shfl_xor_sync(0xffffffff, val, stride);
-    out[0] = sum;
+    out[0] = val;
 }
 
 template <int BLOCK_SIZE>

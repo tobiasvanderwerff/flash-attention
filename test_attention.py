@@ -1,12 +1,10 @@
-import os
-import time
 from pathlib import Path
 import torch
 
 import torch
 import pytest
 
-from util import load_cuda, load_cuda_inline, set_env_vars, load_and_compile_sources
+from util import set_env_vars, load_and_compile_sources
 
 set_env_vars()
 module = load_and_compile_sources(Path("csrc"))
@@ -51,8 +49,8 @@ def test_attention_kernel(seq_len, d):
     V = torch.randn(seq_len, d, device="cuda", dtype=torch.float32)
 
     out = module.my_attention(Q, K.transpose(0, 1).contiguous(), V)
-    # out_pt = _attention(Q, K, V)
-    out_pt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, scale=1.0)
+    out_pt = _attention(Q, K, V)
+    # out_pt = torch.nn.functional.scaled_dot_product_attention(Q, K, V, scale=1.0)
 
     assert out.shape == out_pt.shape
     assert ((out - out_pt).abs() < 1e-4).all().item()
@@ -60,7 +58,7 @@ def test_attention_kernel(seq_len, d):
 
 
 def _softmax(inp):
-    inp_exp = torch.exp(inp)
+    inp_exp = torch.exp(inp - inp.max(dim=1, keepdim=True)[0])
     inp_exp_sum = inp_exp.sum(dim=1, keepdim=True)
     out = inp_exp / inp_exp_sum
     return out

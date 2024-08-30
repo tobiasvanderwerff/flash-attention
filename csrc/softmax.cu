@@ -4,6 +4,18 @@
 
 __device__ inline unsigned int cdiv(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
+
+template <int BLOCK_SIZE>
+__global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
+    // TODO
+}
+
+__inline__ __device__ void warp_reduce_sum(float* out, float val) {
+    for (int stride = 1; stride < warpSize, stride *= 2)
+        val += __shfl_xor_sync(0xffffffff, val, stride);
+    out[0] = sum;
+}
+
 template <int BLOCK_SIZE>
 __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
     /* Softmax applied row-wise. 

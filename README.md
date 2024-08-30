@@ -1,6 +1,6 @@
 # Flash Attention
 
-An implementation of flash attention, for learning purposes.
+An implementation of flash attention in CUDA C++, for learning purposes.
 
 ## Setup
 
@@ -59,10 +59,10 @@ python test_matmul.py
 - [x] Make compilation faster. It currently takes 45-50 seconds each time...
 - [x] Write softmax kernel
 - [x] Write naive attention kernel
+- [x] See what solution chatgpt comes up with for softmax kernel
     - [ ] use/write transpose matmul kernel instead of assuming that K is passed already transposed
 - [ ] Start with flash attention implementation
 - [ ] Look for ways to optimize softmax kernel
-- [ ] See what solution chatgpt comes up with for softmax kernel
 - [ ] Try out Nsight profiler to get insight into performance bottlenecks
 - [ ] Triton?
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 

@@ -3,6 +3,7 @@
 #include <c10/cuda/CUDAException.h>
 #include <torch/extension.h>
 #include "util.hpp"
+#include "cublas.hpp"
 
 
 template <int TILE_SIZE>
@@ -19,6 +20,18 @@ torch::Tensor my_matmul_out(torch::Tensor& out, const torch::Tensor& A, const to
     TORCH_CHECK(k == B.size(0) && out.sizes() == std::vector<int64_t>({h, w}), "Size mismatch!");
     TORCH_CHECK(out.scalar_type() == A.scalar_type() && out.scalar_type() == B.scalar_type(), "Scalar type mismatch!");
 
+    /*
+    cudaDeviceProp devProp;
+    CUDA_ERR(cudaGetDeviceProperties(&devProp, 0));
+    int maxThreads = devProp.maxThreadsPerBlock;
+    // Dynamicly calculated shared memory size
+    size_t requiredSize = static_cast(maxThreads) * 2 * sizeof(float);
+    size_t size = min(devProp.sharedMemPerBlock, requiredSize);
+    int TW = std::sqrt(maxThreads);
+    std::cout << "Shared memory size: " << devProp.sharedMemPerBlock << std::endl;
+    std::cout << "Max threads per block: " << maxThreads << std::endl;
+    */
+
     dim3 bdim(16, 16);
     dim3 gdim(cdiv(w, bdim.x), cdiv(h, bdim.y));
     launch_matmul_kernel<16>(
@@ -33,18 +46,6 @@ torch::Tensor my_matmul(const torch::Tensor& A, const torch::Tensor& B) {
     int k = A.size(1);
     TORCH_CHECK(k==B.size(0), "Size mismatch!");
     auto out = torch::zeros({h, w}, A.options());
-
-    /*
-    cudaDeviceProp devProp;
-    CUDA_ERR(cudaGetDeviceProperties(&devProp, 0));
-    int maxThreads = devProp.maxThreadsPerBlock;
-    // Dynamicly calculated shared memory size
-    size_t requiredSize = static_cast(maxThreads) * 2 * sizeof(float);
-    size_t size = min(devProp.sharedMemPerBlock, requiredSize);
-    int TW = std::sqrt(maxThreads);
-    std::cout << "Shared memory size: " << devProp.sharedMemPerBlock << std::endl;
-    std::cout << "Max threads per block: " << maxThreads << std::endl;
-    */
 
     const int tile_size = 16;
 
@@ -66,6 +67,43 @@ torch::Tensor my_matmul(const torch::Tensor& A, const torch::Tensor& B) {
     return out;
 }
 
+torch::Tensor my_matmul_cublas(const torch::Tensor& A, const torch::Tensor& B) {
+    CHECK_INPUT(A); CHECK_INPUT(B);
+    int m = A.size(0);
+    int n = B.size(1);
+    int k = A.size(1);
+    TORCH_CHECK(k==B.size(0), "Size mismatch!");
+    auto out = torch::zeros({m, n}, A.options());
+
+    cublasHandle_t cublas_handle;
+    CUBLAS_ERR(cublasCreate(&cublas_handle));
+
+    const float alpha = 1.0f;
+    const float beta = 0.0f;
+
+    // Note that CUBLAS expects column-major matrices. Since the input matrices are
+    // row-major, we apply the following trick.
+    // First note that that tranposing a matrix is the same as switching between row-major
+    // and column-major layout. Then,
+    // C_row-maj = C_col-maj^T
+    //           = (A_col-maj * B_col-maj)^T  // expand C
+    //           = B_col-maj^T * A_row-maj^T  // apply transpose rule (AB)^T = B^T A^T
+    //           = B_row-maj * A_row-maj
+    CUBLAS_ERR(
+        cublasSgemm(cublas_handle, 
+                    CUBLAS_OP_N, CUBLAS_OP_N, 
+                    n, m, k, 
+                    &alpha, 
+                    B.data_ptr<float>(), n,
+                    A.data_ptr<float>(), k,
+                    &beta,
+                    out.data_ptr<float>(), n)
+    );
+
+    CUBLAS_ERR(cublasDestroy(cublas_handle));
+
+    return out;
+}
 
 torch::Tensor my_softmax(const torch::Tensor& inp) {
     CHECK_INPUT(inp);
@@ -130,5 +168,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 m.def("my_softmax", torch::wrap_pybind_function(my_softmax), "my_softmax");
 m.def("my_attention", torch::wrap_pybind_function(my_attention), "my_attention");
 m.def("my_matmul", torch::wrap_pybind_function(my_matmul), "my_matmul");
+m.def("my_matmul_cublas", torch::wrap_pybind_function(my_matmul_cublas), "my_matmul_cublas");
 m.def("my_matmul_out", torch::wrap_pybind_function(my_matmul_out), "my_matmul_out");
 }

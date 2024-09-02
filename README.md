@@ -65,6 +65,7 @@ python test_matmul.py
 - [ ] Look for ways to optimize softmax kernel
 - [ ] Write transpose matmul kernel
 - [ ] Try out Nsight profiler to get insight into performance bottlenecks
-- [ ] Triton?
+- [ ] (optional) Use CUDA APIs (eg CuBLASS) for more efficient implementations of e.g. matmul
+- [ ] (optional) Triton implementation
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 
 

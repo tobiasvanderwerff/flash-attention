@@ -7,13 +7,34 @@ __device__ inline unsigned int cdiv(unsigned int a, unsigned int b) { return (a 
 
 template <int BLOCK_SIZE>
 __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
+    /* Softmax applied row-wise. 
+
+    Replaces shared memory with warp-level shuffles.
+    It also uses packed data structures.
+
+    I.e. instead of thread coarsening by iterating over blocks:
+    - reduce 2x per block using 32 sized warps (32*32=1024, which is assumed to be max block size)
+        - or, when k is small, iterate over warps
+    - use a packed data structure (float4?)
+
+    Inspiration:
+    - https://github.com/facebookincubator/AITemplate/wiki/How-to-write-a-fast-Softmax-CUDA-kernel%3F
+    - https://developer.nvidia.com/blog/register-cache-warp-cuda/
+
+    NB: be careful with register spilling (e.g. 25 int registers for a single thread is pushing it). Quote from second link:
+    > the efficiency of the register cache is predicated on the availability of
+    > spare registers. Otherwise, registers start spilling to global memory,
+    > leading to a dramatic performance drop, as is the case for k=25 in Figure 6
+    */
+
     // TODO
 }
 
-__inline__ __device__ void warp_reduce_sum(float* out, float val) {
+template <typename T>
+__inline__ __device__ void warp_reduce_sum(T* val) {
+    #pragma unroll
     for (int stride = 1; stride < warpSize; stride *= 2)
-        val += __shfl_xor_sync(0xffffffff, val, stride);
-    out[0] = val;
+        val[0] += __shfl_xor_sync(0xffffffff, val[0], stride);
 }
 
 template <int BLOCK_SIZE>

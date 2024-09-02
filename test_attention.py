@@ -23,6 +23,18 @@ def test_matmul_kernel(h, w, k):
     out_pt = torch.matmul(m1, m2)
     assert torch.isclose(out, out_pt, atol=1e-4).all().item()
 
+@pytest.mark.parametrize(
+    "h,k,w", [(2, 2, 20), (20, 2, 2), (3, 7, 11), (1024, 1024, 1024), 
+              (1000, 10, 10), (10, 10, 1000), (999, 999, 999)]
+)
+def test_matmul_cublas_kernel(h, w, k):
+    torch.manual_seed(1)
+    m1 = torch.randn(h, k, device="cuda")
+    m2 = torch.randn(k, w, device="cuda")
+
+    out = module.my_matmul_cublas(m1, m2)
+    out_pt = torch.matmul(m1, m2)
+    assert torch.isclose(out, out_pt, atol=1e-4).all().item()
 
 @pytest.mark.parametrize(
     "h,w", [(256, 256), (99, 99), (100, 2048), (100, 2047), (1024, 1024)]

@@ -1,7 +1,9 @@
 
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 #include <c10/cuda/CUDAException.h>
+#include "cublas.hpp"
 
 
 __global__ void matmul_kernel_1(float* out, const float* A, const float* B, int h, int w, int k) {

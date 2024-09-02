@@ -2,6 +2,8 @@
 
 An implementation of flash attention in CUDA C++, for learning purposes.
 
+Requires CUDA >=11.4 for CUTLASS. See [CUTLASS docs for a list of supported GPUs](https://github.com/NVIDIA/cutlass/tree/main?tab=readme-ov-file#hardware).
+
 ## Setup
 
 Install `ccache` (used for faster compilation by using caching):
@@ -49,6 +51,13 @@ python test_matmul.py
     - I guess the broader lesson from this is that if GPU resources are insufficient to perform a kernel fully parallelized in one run, you have to decide what are the best places to apply serialization.
     - See e.g. [this post](https://ajdillhoff.github.io/notes/gpu_performance_basics/#thread-coarsening) for an example of thread coarsening in the case of matrix multiplication.
 
+## What's so special about Flash Attention?
+
+Flash Attention is, at its core, a type of layer fusion (one of the most important optimizations to make neural nets faster). Specifically, the Attention operation consists of three basic operations - matmul, softmax, matmul (in the most simplified form). Flash Attention applies layer fusion by putting all three operations into a single kernel to avoid having to move data in and out of global memory for each kernel call. 
+
+Normally, there are compilers that can do layer fusion for you in an automated way (e.g. `torch.compile`), but this only works for simple fusions. A compiler like `torch.compile`, couldn't have merged the three operations for attention because there is not enough shared memory to perform all three operations without writing to global memory. This is where Flash Attention uses a mathematical trick to compute softmax in an online fashion so that it can be decomposed across multiple thread blocks. This way, it can be computed in the same kernel as the matmuls. 
+
+This optimization to the attention mechanism is a big deal because the attention function is used *a lot* in modern deep learning (LLMs are mostly large Transformers that recursively apply attention).
 
 ## TODO
 
@@ -63,11 +72,12 @@ python test_matmul.py
 - [x] See what solution chatgpt comes up with for softmax kernel
 - [x] Python impl of flash attention
 - [x] Try out cuBLAS
-- [ ] Integrate with CUTLASS
+- [ ] Integrate with CUTLASS + CuTE (CUTLASS >=3.0)
 - [ ] C++ impl of flash attention
+- [ ] Set up NCU/(Nsight?) profiling on Lightning Studio 
+- [ ] Profile kernels with NCU (eg to see whether an implementation is compute-bound or memory-bound and where things can be improved). Softmax is a good one to try out first.
 - [ ] Look for ways to optimize softmax kernel
-- [ ] Write transpose matmul kernel
-- [ ] Try out Nsight profiler to get insight into performance bottlenecks
+- [ ] Write transpose matmul kernel (?)
 - [ ] (optional) Triton implementation
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 
 

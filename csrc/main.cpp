@@ -75,6 +75,7 @@ torch::Tensor my_matmul_cublas(const torch::Tensor& A, const torch::Tensor& B) {
     TORCH_CHECK(k==B.size(0), "Size mismatch!");
     auto out = torch::zeros({m, n}, A.options());
 
+    // TODO: find a better place to initialize/destroy the handle
     cublasHandle_t cublas_handle;
     CUBLAS_ERR(cublasCreate(&cublas_handle));
 
@@ -82,7 +83,7 @@ torch::Tensor my_matmul_cublas(const torch::Tensor& A, const torch::Tensor& B) {
     const float beta = 0.0f;
 
     // Note that CUBLAS expects column-major matrices. Since the input matrices are
-    // row-major, we apply the following trick.
+    // row-major, we apply the following trick (see https://stackoverflow.com/a/56064726).
     // First note that that tranposing a matrix is the same as switching between row-major
     // and column-major layout. Then,
     // C_row-maj = C_col-maj^T
@@ -157,9 +158,11 @@ torch::Tensor my_attention(const torch::Tensor& Q, const torch::Tensor& K, const
     TORCH_CHECK(d == K.size(0) && n == K.size(1) &&
                 n == V.size(0) && d == V.size(1), "Wrong sizes!");
 
-    auto QK = my_matmul(Q, K);
+    // auto QK = my_matmul(Q, K);
+    auto QK = my_matmul_cublas(Q, K);
     auto weights = my_softmax(QK);
-    auto out = my_matmul(weights, V);
+    // auto out = my_matmul(weights, V);
+    auto out = my_matmul_cublas(weights, V);
 
     return out;
 }

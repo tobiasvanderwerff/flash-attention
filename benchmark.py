@@ -36,15 +36,13 @@ n = 1024
 print(f"\nBenchmarking matmul ({n}x{n})...")
 m1 = torch.randn(n, n, device="cuda")
 m2 = torch.randn(n, n, device="cuda")
-out = torch.zeros_like(m1)
-benchmark(module.my_matmul_out, out, m1, m2)
+benchmark(module.my_matmul, m1, m2)
 
 # Benchmark matmul
 n = 1024
-print(f"\nBenchmarking matmul CuBLAS ({n}x{n})...")
+print(f"\nBenchmarking matmul cuBLAS ({n}x{n})...")
 m1 = torch.randn(n, n, device="cuda")
 m2 = torch.randn(n, n, device="cuda")
-out = torch.zeros_like(m1)
 benchmark(module.my_matmul_cublas, m1, m2)
 
 # Benchmark softmax

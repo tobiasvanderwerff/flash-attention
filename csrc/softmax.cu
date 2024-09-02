@@ -38,6 +38,28 @@ __inline__ __device__ void warp_reduce_sum(T* val) {
 }
 
 template <int BLOCK_SIZE>
+__device__ float compute_row_max(const float* inp, float* shm, int n) {
+    /* Calculate max value of the row */
+    const int tx = threadIdx.x;
+    const int bx = blockIdx.x;
+    float max_val = -INFINITY;
+    for (int bi = 0; bi < cdiv(n, BLOCK_SIZE); ++bi) { // Thread coarsening
+        int col = bi*BLOCK_SIZE + tx;
+        shm[tx] = (col < n) ? inp[bx*n + col] : -INFINITY;
+
+        __syncthreads();
+        for (int stride = BLOCK_SIZE >> 1; stride >= 1; stride >>= 1) {
+            if (tx < stride)
+                shm[tx] = fmaxf(shm[tx], shm[tx + stride]);
+            __syncthreads();
+        }
+
+        max_val = fmaxf(max_val, shm[0]);
+    }
+    return max_val;
+}
+
+template <int BLOCK_SIZE>
 __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
     /* Softmax applied row-wise. 
 
@@ -52,20 +74,7 @@ __global__ void softmax_kernel(float* out, const float* inp, int h, int w) {
     const int bx = blockIdx.x;
 
     // Calculate max value of the row
-    float max_val = -INFINITY;
-    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
-        int col = bi*BLOCK_SIZE + tx;
-        shm[tx] = (col < w) ? inp[bx*w + col] : -INFINITY;
-
-        __syncthreads();
-        for (int stride = BLOCK_SIZE >> 1; stride >= 1; stride >>= 1) {
-            if (tx < stride)
-                shm[tx] = fmaxf(shm[tx], shm[tx + stride]);
-            __syncthreads();
-        }
-
-        max_val = fmaxf(max_val, shm[0]);
-    }
+    float max_val = compute_row_max<BLOCK_SIZE>(inp, shm, w);
 
     float sum = 0.0f;
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening

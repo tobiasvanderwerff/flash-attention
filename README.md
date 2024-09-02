@@ -38,6 +38,7 @@ python test_matmul.py
 
 ## Observations
 
+- At first, I wanted to use cuBLAS for matrix multiplication functionality over CUTLASS. However this does not work because, unlike CUTLASS, cuBLAS functions (e.g. for matmul) cannot be called inside CUDA kernels - only from host code. This makes cuBLAS unsuitable to implement Flash Attention, since it requires performing matmuls inside a kernel function (so that data does not get moved back and forth to global memory).
 - ~~I don't see a clear advantage of using `torch.utils.cpp_extension.load` over `torch.utils.cpp_extension.load_inline`. In terms of compilation speed, I don't see a big difference.~~
     - Edit: it actually does help for faster compilation if you separate the .cpp and .cu files
 - Wurlitzer doesn't seem to work in VSCode Jupyter notebooks. Specifically, it doesn't print the compilation output when running `load_inline`. This makes development in a notebook quite difficult because you cannot see the compiler errors.
@@ -61,11 +62,12 @@ python test_matmul.py
 - [x] Write naive attention kernel
 - [x] See what solution chatgpt comes up with for softmax kernel
 - [x] Python impl of flash attention
+- [x] Try out cuBLAS
+- [ ] Integrate with CUTLASS
 - [ ] C++ impl of flash attention
 - [ ] Look for ways to optimize softmax kernel
 - [ ] Write transpose matmul kernel
 - [ ] Try out Nsight profiler to get insight into performance bottlenecks
-- [ ] (optional) Use CUDA APIs (eg CuBLASS) for more efficient implementations of e.g. matmul
 - [ ] (optional) Triton implementation
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 
 

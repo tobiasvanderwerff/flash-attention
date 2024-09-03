@@ -37,7 +37,25 @@ Run benchmark:
 python test_matmul.py
 ```
 
-## Running ncu profiler
+## Profiling kernels
+
+In order to hone in on the actual performance of the CUDA kernels, the best approach is perhaps to use the `ncu` profiler (see [running ncu profiler](#running-ncu-profiler) section below if you want to run `ncu` on a cloud GPU instance). I found it easiest to profile the pytest test cases set up in `test_attention.py`. For example, if I want to profile the softmax kernel, I run:
+
+```shell
+sudo ncu -k softmax_kernel pytest -k "test_softmax_kernel[1024-1024]"
+```
+
+The first `-k` flag will make sure that only the `softmax_kernel` function is being profiled. The second `-k` flag is for `pytest`, and ensures that only a specific test case is run (in this case, the `test_softmax_kernel` function with arguments `[1024, 1024]`). 
+
+If you want to also profile kernels from other packages (e.g. Pytorch), it is best to first run ncu without a kernel specifier to see the list of kernel names that are profiled:
+
+```shell
+sudo ncu pytest
+```
+
+Note that depending on the number of test cases, this might produce a lot of output. Consider focusing on a single test case in `test_attention.py` to avoid this (e.g. passing `-k "test_softmax_kernel[1024-1024]"`).
+
+## Running ncu profiler on a cloud GPU instance
 
 The Nsight profiler (`ncu`) is a very useful tool to profile CUDA kernels.  However, it will not run out of the box on cloud GPUs. If you run `ncu`, you get an output like this:
 

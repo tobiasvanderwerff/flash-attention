@@ -37,6 +37,44 @@ Run benchmark:
 python test_matmul.py
 ```
 
+## Running ncu profiler
+
+The Nsight profiler (`ncu`) is a very useful tool to profile CUDA kernels.  However, it will not run out of the box on cloud GPUs. If you run `ncu`, you get an output like this:
+
+```shell
+$ ncu ./benchmark
+==PROF== Connected to process 2258 (/mnt/tobias/benchmark)
+==ERROR== ERR_NVGPUCTRPERM - The user does not have permission to access NVIDIA GPU Performance Counters on the target device 0. For instructions on enabling permissions and to get more information see https://developer.nvidia.com/ERR_NVGPUCTRPERM
+```
+
+To fix this, you can run `ncu` with `sudo`. Note however that when you run `sudo`, your environment variables change, which means that `ncu` may no longer be on the PATH. This can be fixed by specifying the full path to `ncu`. E.g.:
+
+```bash
+which ncu  # check ncu path
+sudo /opt/conda/envs/flash-attention/bin/ncu  # pass ncu path
+```
+
+In my case, ncu is provided through Conda. To make running ncu more convenient, you can directly add your Conda path to the "sudoers" file. Do this as follows:
+
+```shell
+sudo visudo
+```
+
+ Add your conda environment's bin directory to the Defaults secure_path line: 
+
+```shell
+Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/path/to/conda/env/bin"
+```
+
+Replace /path/to/conda/env/bin with the actual path to your conda environment's bin directory.
+
+
+You can now run ncu simply by prepending `sudo`:
+
+```shell
+sudo ncu
+```
+
 
 ## Observations
 
@@ -72,9 +110,9 @@ This optimization to the attention mechanism is a big deal because the attention
 - [x] See what solution chatgpt comes up with for softmax kernel
 - [x] Python impl of flash attention
 - [x] Try out cuBLAS
+- [x] Set up NCU/(Nsight?) profiling on Lightning Studio 
 - [ ] Integrate with CUTLASS + CuTE (CUTLASS >=3.0)
 - [ ] C++ impl of flash attention
-- [ ] Set up NCU/(Nsight?) profiling on Lightning Studio 
 - [ ] Profile kernels with NCU (eg to see whether an implementation is compute-bound or memory-bound and where things can be improved). Softmax is a good one to try out first.
 - [ ] Look for ways to optimize softmax kernel
 - [ ] Write transpose matmul kernel (?)

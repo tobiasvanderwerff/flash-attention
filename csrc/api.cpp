@@ -4,13 +4,11 @@
 #include <torch/extension.h>
 #include "my_flash_attn/cublas.hpp"
 #include "my_flash_attn/util.hpp"
+#include "cutlass/cutlass.h"
 
 
 template <int TILE_SIZE>
 void launch_matmul_kernel(dim3 gdim, dim3 bdim, float* out, const float* A, const float* B, int h, int w, int k); 
-
-template <int BLOCK_SIZE>
-void launch_softmax_kernel(int gdim, int bdim, float* out, const float* inp, int h, int w); 
 
 torch::Tensor my_matmul_out(torch::Tensor& out, const torch::Tensor& A, const torch::Tensor& B) {
     CHECK_INPUT(A); CHECK_INPUT(B); CHECK_INPUT(out);
@@ -106,7 +104,10 @@ torch::Tensor my_matmul_cublas(const torch::Tensor& A, const torch::Tensor& B) {
     return out;
 }
 
-torch::Tensor my_softmax(const torch::Tensor& inp) {
+template <int BLOCK_SIZE>
+void launch_softmax_kernel(int gdim, int bdim, float* out, const float* inp, int h, int w, int kernel_no); 
+
+torch::Tensor my_softmax(const torch::Tensor& inp, int kernel_no = 1) {
     CHECK_INPUT(inp);
     int h = inp.size(0);
     int w = inp.size(1);
@@ -115,13 +116,14 @@ torch::Tensor my_softmax(const torch::Tensor& inp) {
     // For better occupancy on matrices with smaller rows, it would probably be
     // best to choose the block size to be the next power of 2 from the matrix
     // width.
-    const int block_size = 128;
+    // const int block_size = 128;
+    const int block_size = 1024;
     const int blocks = h;
 
     TORCH_CHECK(is_power_of_two(block_size), "Block size is expected to be a power of 2. Got ", block_size);
 
     auto f = [&](auto kf) { kf(
-        blocks, block_size, out.data_ptr<float>(), inp.data_ptr<float>(), h, w); 
+        blocks, block_size, out.data_ptr<float>(), inp.data_ptr<float>(), h, w, kernel_no); 
     };
 
     switch(block_size) {

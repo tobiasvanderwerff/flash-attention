@@ -117,7 +117,7 @@ ext_modules.append(
         name="my_flash_attn_cuda",
         sources=sources,
         extra_compile_args={
-            "cxx": ["-O2", "-std=c++17"],
+            "cxx": ["-O2", "-std=c++17"],  # C++17 is needed for cutlass
             "nvcc": append_nvcc_threads(
                 [
                     "-O2",

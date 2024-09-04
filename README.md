@@ -1,8 +1,8 @@
 # Flash Attention
 
-An implementation of flash attention in CUDA C++, for learning purposes.
+An implementation of flash attention in CUDA C++ & CUTLASS, for learning purposes.
 
-Requires CUDA >=11.4 for CUTLASS. See [CUTLASS docs for a list of supported GPUs](https://github.com/NVIDIA/cutlass/tree/main?tab=readme-ov-file#hardware).
+Requires a C++17 host compiler and CUDA >=11.4 for CUTLASS. See [CUTLASS docs for a list of supported GPUs](https://github.com/NVIDIA/cutlass/tree/main?tab=readme-ov-file#hardware).
 
 ## Setup
 
@@ -42,7 +42,7 @@ python test_matmul.py
 In order to hone in on the actual performance of the CUDA kernels, the best approach is perhaps to use the `ncu` profiler (see [running ncu profiler](#running-ncu-profiler) section below if you want to run `ncu` on a cloud GPU instance). I found it easiest to profile the pytest test cases set up in `test_attention.py`. For example, if I want to profile the softmax kernel, I run:
 
 ```shell
-sudo ncu -k softmax_kernel pytest tests -k "test_softmax_kernel[1024-1024]"
+sudo ncu -k regex:softmax_kernel* pytest tests -k "test_softmax_kernel[1024-1024]"
 ```
 
 The first `-k` flag will make sure that only the `softmax_kernel` function is being profiled. The second `-k` flag is for `pytest`, and ensures that only a specific test case is run (in this case, the `test_softmax_kernel` function with arguments `[1024, 1024]`). 

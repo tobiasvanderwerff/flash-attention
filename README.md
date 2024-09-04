@@ -1,8 +1,8 @@
 # Flash Attention
 
-An implementation of flash attention in CUDA C++, for learning purposes.
+An implementation of flash attention in CUDA C++ & CUTLASS, for learning purposes.
 
-Requires CUDA >=11.4 for CUTLASS. See [CUTLASS docs for a list of supported GPUs](https://github.com/NVIDIA/cutlass/tree/main?tab=readme-ov-file#hardware).
+Requires a C++17 host compiler and CUDA >=11.4 for CUTLASS. See [CUTLASS docs for a list of supported GPUs](https://github.com/NVIDIA/cutlass/tree/main?tab=readme-ov-file#hardware).
 
 ## Setup
 

@@ -2,8 +2,8 @@
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAException.h>
 #include <torch/extension.h>
-#include "util.hpp"
-#include "cublas.hpp"
+#include "my_flash_attn/cublas.hpp"
+#include "my_flash_attn/util.hpp"
 
 
 template <int TILE_SIZE>
@@ -22,7 +22,7 @@ torch::Tensor my_matmul_out(torch::Tensor& out, const torch::Tensor& A, const to
 
     /*
     cudaDeviceProp devProp;
-    CUDA_ERR(cudaGetDeviceProperties(&devProp, 0));
+    CHECK_CUDA_ERR(cudaGetDeviceProperties(&devProp, 0));
     int maxThreads = devProp.maxThreadsPerBlock;
     // Dynamicly calculated shared memory size
     size_t requiredSize = static_cast(maxThreads) * 2 * sizeof(float);
@@ -115,7 +115,7 @@ torch::Tensor my_softmax(const torch::Tensor& inp) {
     // For better occupancy on matrices with smaller rows, it would probably be
     // best to choose the block size to be the next power of 2 from the matrix
     // width.
-    const int block_size = 256;
+    const int block_size = 128;
     const int blocks = h;
 
     TORCH_CHECK(is_power_of_two(block_size), "Block size is expected to be a power of 2. Got ", block_size);

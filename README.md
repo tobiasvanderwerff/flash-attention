@@ -28,7 +28,7 @@ pip install -r requirements.txt
 Run tests:
 
 ```shell
-pytest -v -ss
+pytest tests -v -s
 ```
 
 Run benchmark:
@@ -42,7 +42,7 @@ python test_matmul.py
 In order to hone in on the actual performance of the CUDA kernels, the best approach is perhaps to use the `ncu` profiler (see [running ncu profiler](#running-ncu-profiler) section below if you want to run `ncu` on a cloud GPU instance). I found it easiest to profile the pytest test cases set up in `test_attention.py`. For example, if I want to profile the softmax kernel, I run:
 
 ```shell
-sudo ncu -k softmax_kernel pytest -k "test_softmax_kernel[1024-1024]"
+sudo ncu -k softmax_kernel pytest tests -k "test_softmax_kernel[1024-1024]"
 ```
 
 The first `-k` flag will make sure that only the `softmax_kernel` function is being profiled. The second `-k` flag is for `pytest`, and ensures that only a specific test case is run (in this case, the `test_softmax_kernel` function with arguments `[1024, 1024]`). 
@@ -50,10 +50,12 @@ The first `-k` flag will make sure that only the `softmax_kernel` function is be
 If you want to also profile kernels from other packages (e.g. Pytorch), it is best to first run ncu without a kernel specifier to see the list of kernel names that are profiled:
 
 ```shell
-sudo ncu pytest
+sudo ncu pytest tests
 ```
 
 Note that depending on the number of test cases, this might produce a lot of output. Consider focusing on a single test case in `test_attention.py` to avoid this (e.g. passing `-k "test_softmax_kernel[1024-1024]"`).
+
+Tip: it can be quite illuminating to compare the `ncu` output of your custom kernels (e.g. for Softmax) to their corresponding Pytorch implementations. The Pytorch implementations are a good upper bound on performance because they will be heavily optimized. E.g. my initial softmax kernel implementation was 5x as slow as Pytorch, even though occupancy and compute throughput was higher in the custom kernel.
 
 ## Running ncu profiler on a cloud GPU instance
 
@@ -64,6 +66,7 @@ $ ncu ./benchmark
 ==PROF== Connected to process 2258 (/mnt/tobias/benchmark)
 ==ERROR== ERR_NVGPUCTRPERM - The user does not have permission to access NVIDIA GPU Performance Counters on the target device 0. For instructions on enabling permissions and to get more information see https://developer.nvidia.com/ERR_NVGPUCTRPERM
 ```
+ 
 
 To fix this, you can run `ncu` with `sudo`. Note however that when you run `sudo`, your environment variables change, which means that `ncu` may no longer be on the PATH. This can be fixed by specifying the full path to `ncu`. E.g.:
 
@@ -96,16 +99,15 @@ sudo ncu
 
 ## Observations
 
+- Common pattern: vs. Pytorch kernel, L1 cache throughput is higher for my custom kernel, but L2 cache throughput is lower. I think DRAM throughput may also be lower.
 - At first, I wanted to use cuBLAS for matrix multiplication functionality over CUTLASS. However this does not work because, unlike CUTLASS, cuBLAS functions (e.g. for matmul) cannot be called inside CUDA kernels - only from host code. This makes cuBLAS unsuitable to implement Flash Attention, since it requires performing matmuls inside a kernel function (so that data does not get moved back and forth to global memory).
 - ~~I don't see a clear advantage of using `torch.utils.cpp_extension.load` over `torch.utils.cpp_extension.load_inline`. In terms of compilation speed, I don't see a big difference.~~
     - Edit: it actually does help for faster compilation if you separate the .cpp and .cu files
-- Wurlitzer doesn't seem to work in VSCode Jupyter notebooks. Specifically, it doesn't print the compilation output when running `load_inline`. This makes development in a notebook quite difficult because you cannot see the compiler errors.
-
-## Lessons learned
-
 - For large matrices and row-wise processing, using thread coarsening with smaller block sizes can actually lead to higher perf compared to using larger block sizes and fewer or no thread coarsening. E.g. for softmax. The point is that for larger matrices, the total number of threads in the GPU isn't sufficient to cover the whole matrix, so you have to find the best allocation of threads for processing the matrix. Let's say you compute softmax row-wise. You can then either dedicate more threads per row of the matrix (large block size) or process more rows in parallel with fewer threads per row (with more coarsening, i.e. single threads doing more work).
     - I guess the broader lesson from this is that if GPU resources are insufficient to perform a kernel fully parallelized in one run, you have to decide what are the best places to apply serialization.
     - See e.g. [this post](https://ajdillhoff.github.io/notes/gpu_performance_basics/#thread-coarsening) for an example of thread coarsening in the case of matrix multiplication.
+- Wurlitzer doesn't seem to work in VSCode Jupyter notebooks. Specifically, it doesn't print the compilation output when running `load_inline`. This makes development in a notebook quite difficult because you cannot see the compiler errors.
+
 
 ## What's so special about Flash Attention?
 
@@ -129,10 +131,10 @@ This optimization to the attention mechanism is a big deal because the attention
 - [x] Python impl of flash attention
 - [x] Try out cuBLAS
 - [x] Set up NCU/(Nsight?) profiling on Lightning Studio 
+- [x] Profile kernels with NCU (eg to see whether an implementation is compute-bound or memory-bound and where things can be improved). Softmax is a good one to try out first.
 - [ ] Integrate with CUTLASS + CuTE (CUTLASS >=3.0)
 - [ ] C++ impl of flash attention
-- [ ] Profile kernels with NCU (eg to see whether an implementation is compute-bound or memory-bound and where things can be improved). Softmax is a good one to try out first.
-- [ ] Look for ways to optimize softmax kernel
+- [ ] Look to ncu output for ways to optimize softmax kernel
 - [ ] Write transpose matmul kernel (?)
 - [ ] (optional) Triton implementation
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 

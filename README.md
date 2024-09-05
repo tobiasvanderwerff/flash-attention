@@ -49,7 +49,8 @@ Softmax perf. on (1024x1024 input):
 |----------|-------|------------------------------------------------------------|
 | Kernel 1 | 105 µs | Shared memory implementation.                              |
 | Kernel 2 | 71 µs  | Kernel 1 + uses warp-level operations to reduce shared memory usage   |
-| Kernel 3 | 57 µs  | Kernel 2 + float4 instead of float datatypes               |
+| Kernel 3 | 57 µs  | Kernel 2 + float4 instead of float datatypes (DOES NOT PRODUCE RIGHT RESULT FOR BLOCK_SIZE=128)              |
+| Kernel 4 | 68 µs  | Kernel 3 but with no shared memory and size 32 block sizes |
 
 
 
@@ -114,7 +115,10 @@ sudo ncu
 
 ## Observations
 
+- Almost always, ncu gives you the information you need to diagnose an underperforming kernel. Make sure to use `--set full` for the most complete output.
+- Pattern: make computation more sequential to avoid block syncrhonization and shared memory access. E.g. when using warp operations.
 - Common pattern: vs. Pytorch kernel, L1 cache throughput is higher for my custom kernel, but L2 cache throughput is lower. I think DRAM throughput may also be lower.
+- Maximizing theoretical occupancy is not an obvious win. For instance, I had a kernel (softmax kernel 4) that had a theoretical occupancy of only 50%. This was due to the fact that I used block sizes of 32, and was dealing with a max block amount per SM of 16 (for the T4 GPU), which led to 16*32=512 threads active on each SM (max. is 1024). I got the theoretical occupancy to 100% by doubling the block sizes (while keeping the computational layout the same), but somehow the kernel became *slower* than before. Moreover, even though the theoretical occupancy was higher, the actual compute throughput did not increase. I figured the effect would only show up for large enough arrays that exceeded the number of CUDA cores in the GPU, but this also did not seem to make a difference. I'm still not sure why exactly this happens - ncu says it has something to do with warps being stalled waiting for a scoreboard dependency on a L1TEX operation. ~~It may be caused by register spilling. When I double the block size, it reduces the number of registers per thread by a factor of 2 (in ncu, "Block Limit Registers" goes from 48 to 24), and Registers Per Thread has a value of 34, which seems to indicate register spilling. Using more registers than what is available would lead to using slower local memory for the registers.~~ Edit: There are no signs of register spilling.
 - At first, I wanted to use cuBLAS for matrix multiplication functionality over CUTLASS. However this does not work because, unlike CUTLASS, cuBLAS functions (e.g. for matmul) cannot be called inside CUDA kernels - only from host code. This makes cuBLAS unsuitable to implement Flash Attention, since it requires performing matmuls inside a kernel function (so that data does not get moved back and forth to global memory).
 - ~~I don't see a clear advantage of using `torch.utils.cpp_extension.load` over `torch.utils.cpp_extension.load_inline`. In terms of compilation speed, I don't see a big difference.~~
     - Edit: it actually does help for faster compilation if you separate the .cpp and .cu files
@@ -147,7 +151,8 @@ This optimization to the attention mechanism is a big deal because the attention
 - [x] Try out cuBLAS
 - [x] Set up NCU/(Nsight?) profiling on Lightning Studio 
 - [x] Profile kernels with NCU (eg to see whether an implementation is compute-bound or memory-bound and where things can be improved). Softmax is a good one to try out first.
-- [ ] Integrate with CUTLASS + CuTE (CUTLASS >=3.0)
+- [x] Integrate with CUTLASS + CuTE (CUTLASS >=3.0)
+- [ ] consider removing softmax kernel 3 (128 block size test fails)
 - [ ] C++ impl of flash attention
 - [ ] How to unit test device functions??
 - [ ] Look to ncu output for ways to optimize softmax kernel

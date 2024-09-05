@@ -122,6 +122,7 @@ ext_modules.append(
                 [
                     "-O2",
                     "-std=c++17",
+                    # "-Xptxas=-v", # check for register spills
                     "-U__CUDA_NO_HALF_OPERATORS__",
                     "-U__CUDA_NO_HALF_CONVERSIONS__",
                     "-U__CUDA_NO_HALF2_OPERATORS__",

@@ -111,14 +111,15 @@ def test_matmul_cublas_kernel(h, w, k):
     assert torch.isclose(out, out_pt, atol=1e-4).all().item()
 
 @pytest.mark.parametrize(
-    "h,w", [(256, 256), (99, 99), (100, 2048), (100, 2047), (1024, 1024)]
+    # "h,w", [(256, 256), (99, 99), (100, 2048), (100, 2047), (1024, 1024)]
+    "h,w", [(256, 256), (99, 99), (100, 2048), (100, 2047), (1024, 1024), (4096, 4096)]
 )
 def test_softmax_kernel(h, w):
     torch.manual_seed(1)
     x = torch.randn(h, w, device="cuda")
     # out = _softmax(x)
     # print(x.max(dim=1)[0][0])
-    out = my_flash_attn_cuda.my_softmax(x, 3)
+    out = my_flash_attn_cuda.my_softmax(x, 4)
     out_pt = torch.nn.functional.softmax(x, dim=1)
 
     assert (out >= 0).all().item()

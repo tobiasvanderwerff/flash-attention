@@ -31,11 +31,11 @@ __global__ void softmax_kernel_1(float* out, const float* inp, int h, int w) {
         __syncthreads();
         for (int stride = BLOCK_SIZE >> 1; stride >= 1; stride >>= 1) {
             if (tx < stride)
-                shm[tx] = fmaxf(shm[tx], shm[tx + stride]);
+                shm[tx] = max(shm[tx], shm[tx + stride]);
             __syncthreads();
         }
 
-        max_val = fmaxf(max_val, shm[0]);
+        max_val = max(max_val, shm[0]);
     }
 
     float sum = 0.0f;
@@ -43,7 +43,7 @@ __global__ void softmax_kernel_1(float* out, const float* inp, int h, int w) {
         // Calculate exponent element-wise
         int idx = bx*w + bi*BLOCK_SIZE + tx;
         if (bi*BLOCK_SIZE + tx < w) {
-            float e = expf(inp[idx] - max_val);  // TODO: use __expf?
+            float e = exp(inp[idx] - max_val);
             out[idx] = e;
             shm[tx] = e;
         } else {
@@ -82,7 +82,7 @@ __forceinline__ __device__ void warp_reduce_sum(T* val) {
 __forceinline__ __device__ void warp_reduce_max(float* max_val) {
     #pragma unroll
     for (int stride = 1; stride < WARP_SIZE; stride *= 2) {
-        *max_val = fmaxf(*max_val, __shfl_xor_sync(0xffffffff, *max_val, stride));
+        *max_val = max(*max_val, __shfl_xor_sync(0xffffffff, *max_val, stride));
     }
 }
 
@@ -104,7 +104,7 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
     const int tx = threadIdx.x;
     const int bx = blockIdx.x;
     const int warp_no = tx / WARP_SIZE;
-    const int warp_idx = tx % WARP_SIZE;
+    const int warp_idx = tx % WARP_SIZE;  // warp_idx == lane
 
     // Calculate max value of the row
     float max_val[1] = {-INFINITY};
@@ -114,7 +114,7 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
         // warpSize=32, block size 1024
         const float val = (col < w) ? inp[bx*w + col] : -INFINITY;
 
-        *max_val = fmaxf(*max_val, val);
+        *max_val = max(*max_val, val);
 
         warp_reduce_max(max_val);
 
@@ -142,7 +142,7 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
         // Calculate exponent element-wise
         int col = bi*BLOCK_SIZE + tx;
         int idx = bx*w + col;
-        const float inp_exp = (col < w) ? expf(inp[idx] - *max_val) : 0;  // TODO: use __expf?
+        const float inp_exp = (col < w) ? exp(inp[idx] - *max_val) : 0;
         if (col < w) out[idx] = inp_exp;
 
         // Calculate sum of exponents
@@ -193,12 +193,16 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
     > leading to a dramatic performance drop.
     */
 
-    __shared__ float shm[WARP_SIZE];
+    constexpr int num_warps = BLOCK_SIZE / WARP_SIZE;
+
+    __shared__ float shm[num_warps];
 
     const int tx = threadIdx.x;
     const int bx = blockIdx.x;
     const int warp_no = tx / WARP_SIZE;
     const int warp_idx = tx % WARP_SIZE;
+
+    assert(warp_no < num_warps);
 
     // Calculate max value of the row
     float max_val[1] = {-INFINITY};
@@ -208,11 +212,11 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
         // warpSize=32, block size 1024
         const float4 val = (col < w/4) ? inp[bx*(w/4) + col] : make_float4(-INFINITY, -INFINITY, -INFINITY, -INFINITY);
 
-        *max_val = fmaxf(*max_val, fmaxf(fmaxf(val.w, val.x), fmaxf(val.y, val.z)));
+        *max_val = max(*max_val, max(max(val.w, val.x), max(val.y, val.z)));
 
         warp_reduce_max(max_val);
 
-        // Load warp results into warp 0
+        // Load all warp results into shmem
         if (warp_idx == 0)
             shm[warp_no] = *max_val;
 
@@ -220,7 +224,7 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
 
         // Final reduction happens in warp 0
         if (warp_no == 0) {
-            *max_val = shm[warp_idx];
+            *max_val = (warp_idx < num_warps) ? shm[warp_idx] : -INFINITY;
             warp_reduce_max(max_val);
             if (tx == 0)
                 shm[0] = *max_val;
@@ -239,10 +243,10 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
         float4 sum4 = {0.0f, 0.0f, 0.0f, 0.0f};
         if (col < w/4) {
             float4 val = inp[idx];
-            sum4.x = expf(val.x - *max_val);
-            sum4.y = expf(val.y - *max_val);
-            sum4.z = expf(val.z - *max_val);
-            sum4.w = expf(val.w - *max_val);
+            sum4.x = exp(val.x - *max_val);
+            sum4.y = exp(val.y - *max_val);
+            sum4.z = exp(val.z - *max_val);
+            sum4.w = exp(val.w - *max_val);
             out[idx] = sum4;
         } 
 
@@ -258,7 +262,7 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
         __syncthreads();
 
         if (warp_no == 0) {
-            *block_sum = shm[warp_idx];
+            *block_sum = (warp_idx < num_warps) ? shm[warp_idx] : 0.0f;
             warp_reduce_sum<float>(block_sum);
             if (tx == 0)
                 shm[0] = *block_sum;
@@ -283,9 +287,90 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
     }
 }
 
+template <int BLOCK_SIZE>
+__global__ void softmax_kernel_4(float4* out, const float4* inp, int h, int w) {
+    /* Softmax applied row-wise. 
+
+    Note: row size must be a factor of 4.
+
+    - Replaces shared memory with warp-level shuffles.
+    - Uses packed data structures (float4 instead of float).
+
+    Inspiration:
+    - https://github.com/facebookincubator/AITemplate/wiki/How-to-write-a-fast-Softmax-CUDA-kernel%3F
+    - https://developer.nvidia.com/blog/register-cache-warp-cuda/
+
+    NB: be careful with register spilling (e.g. 25 int registers for a single thread is pushing it). Quote from second link:
+    > The efficiency of the register cache is predicated on the availability of
+    > spare registers. Otherwise, registers start spilling to global memory,
+    > leading to a dramatic performance drop.
+    */
+
+    const int tx = threadIdx.x;
+    const int row = blockIdx.x;
+    // const int row = 2 * blockIdx.y + blockIdx.x;
+    // const int row = 2 * blockIdx.x + threadIdx.y;  // ncu complains about warp stalling if I do this
+
+    // const int tx = threadIdx.x % WARP_SIZE;  // unusual, I know
+    // const int row = 2 * blockIdx.x + threadIdx.x / WARP_SIZE;
+
+    const int row_offset = row * (w/4);
+
+    if (row >= h) return;
+
+    // Calculate max value of the row
+    float max_val[1] = {-INFINITY};
+    for (int bi = 0; bi < cdiv(w/4, WARP_SIZE); ++bi) { // Thread coarsening
+        int col = bi*WARP_SIZE + tx;
+
+        const float4 val = (col < w/4) ? inp[row_offset + col] : make_float4(-INFINITY, -INFINITY, -INFINITY, -INFINITY);
+
+        *max_val = max(*max_val, max(max(val.w, val.x), max(val.y, val.z)));
+
+        warp_reduce_max(max_val);
+    }
+    // if (tx == 0 && blockIdx.x == 0) printf("Max val: %f\n", *max_val);
+
+    float sum = 0.0f;
+    for (int bi = 0; bi < cdiv(w/4, WARP_SIZE); ++bi) { // Thread coarsening
+        // Calculate exponents element-wise
+        int col = bi*WARP_SIZE + tx;
+        int idx = row_offset + col;
+        float4 sum4 = {0.0f, 0.0f, 0.0f, 0.0f};
+        if (col < w/4) {
+            float4 val = inp[idx];
+            sum4.x = exp(val.x - *max_val);
+            sum4.y = exp(val.y - *max_val);
+            sum4.z = exp(val.z - *max_val);
+            sum4.w = exp(val.w - *max_val);
+            out[idx] = sum4;
+        } 
+
+        // Calculate sum of exponents across the block
+        float block_sum[1] = { sum4.x + sum4.y + sum4.z + sum4.w };
+
+        warp_reduce_sum<float>(block_sum);
+
+        sum += *block_sum;
+    }
+
+    // Divide by exponent sum
+    for (int bi = 0; bi < cdiv(w/4, WARP_SIZE); ++bi) { // Thread coarsening
+        if (bi*WARP_SIZE + tx < w/4) {
+            int idx = row_offset + bi*WARP_SIZE + tx;
+            float4 val = out[idx];
+            val.x /= sum;
+            val.y /= sum;
+            val.z /= sum;
+            val.w /= sum;
+            out[idx] = val;
+        }
+    }
+}
+
 
 template <int BLOCK_SIZE>
-void launch_softmax_kernel(int gdim, int bdim, float* out, float* inp, int h, int w, int kernel_no) { 
+void launch_softmax_kernel(dim3 gdim, dim3 bdim, float* out, float* inp, int h, int w, int kernel_no) { 
     switch (kernel_no) {
         case 1:
             softmax_kernel_1<BLOCK_SIZE><<<gdim, bdim>>>(out, inp, h, w); break;
@@ -295,17 +380,22 @@ void launch_softmax_kernel(int gdim, int bdim, float* out, float* inp, int h, in
             softmax_kernel_3<BLOCK_SIZE><<<gdim, bdim>>>(
                 reinterpret_cast<float4*>(out), reinterpret_cast<float4*>(inp), h, w); 
             break;
+        case 4:
+            softmax_kernel_4<BLOCK_SIZE><<<gdim, bdim>>>(
+                reinterpret_cast<float4*>(out), reinterpret_cast<float4*>(inp), h, w); 
+            break;
         default:
             return;
     }
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-template void launch_softmax_kernel<64>(int gdim, int bdim, float* out, float* inp, int h, int w, int kernel_no);
-template void launch_softmax_kernel<128>(int gdim, int bdim, float* out, float* inp, int h, int w, int kernel_no);
-template void launch_softmax_kernel<256>(int gdim, int bdim, float* out, float* inp, int h, int w, int kernel_no);
-template void launch_softmax_kernel<512>(int gdim, int bdim, float* out, float* inp, int h, int w, int kernel_no);
-template void launch_softmax_kernel<1024>(int gdim, int bdim, float* out, float* inp, int h, int w, int kernel_no);
+template void launch_softmax_kernel<32>  (dim3 gdim, dim3 bdim, float* out, float* inp, int h, int w, int kernel_no);
+template void launch_softmax_kernel<64>  (dim3 gdim, dim3 bdim, float* out, float* inp, int h, int w, int kernel_no);
+template void launch_softmax_kernel<128> (dim3 gdim, dim3 bdim, float* out, float* inp, int h, int w, int kernel_no);
+template void launch_softmax_kernel<256> (dim3 gdim, dim3 bdim, float* out, float* inp, int h, int w, int kernel_no);
+template void launch_softmax_kernel<512> (dim3 gdim, dim3 bdim, float* out, float* inp, int h, int w, int kernel_no);
+template void launch_softmax_kernel<1024>(dim3 gdim, dim3 bdim, float* out, float* inp, int h, int w, int kernel_no);
 
 
 

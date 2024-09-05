@@ -105,7 +105,7 @@ torch::Tensor my_matmul_cublas(const torch::Tensor& A, const torch::Tensor& B) {
 }
 
 template <int BLOCK_SIZE>
-void launch_softmax_kernel(int gdim, int bdim, float* out, float* inp, int h, int w, int kernel_no); 
+void launch_softmax_kernel(dim3 gdim, dim3 bdim, float* out, float* inp, int h, int w, int kernel_no); 
 
 torch::Tensor my_softmax(const torch::Tensor& inp, int kernel_no = 1) {
     CHECK_INPUT(inp);
@@ -113,38 +113,45 @@ torch::Tensor my_softmax(const torch::Tensor& inp, int kernel_no = 1) {
     int w = inp.size(1);
     auto out = torch::zeros({h, w}, inp.options());
 
-    // For better occupancy on matrices with smaller rows, it would probably be
-    // best to choose the block size to be the next power of 2 from the matrix
-    // width.
-    // const int block_size = 128;
-    const int block_size = 1024;
-    const int blocks = h;
+    // constexpr int block_size = 1024;
+    // constexpr int block_size = 128;
+    constexpr int block_size = 32;
 
-    if (kernel_no == 2)
-        TORCH_CHECK(block_size == 1024, "Block size must be 1024 for kernel 2")
-    if (kernel_no == 3)
-        TORCH_CHECK(w % 4 == 0, "Input size must be a multiple of 4 for kernel 3")
+    dim3 gdim, bdim;
+    switch (kernel_no) {
+        case 2:
+            gdim = dim3(h);
+            bdim = dim3(block_size);
+            TORCH_CHECK(block_size == 1024, "Block size must be 1024 for kernel 2")
+            break;
+        case 3:
+            gdim = dim3(h);
+            bdim = dim3(block_size);
+            TORCH_CHECK(w % 4 == 0, "Input size must be a multiple of 4 for kernel 3")
+            TORCH_CHECK(block_size % 32 == 0, "Block size must be a multiple of 32 for kernel 3")
+            break;
+        case 4: 
+            TORCH_CHECK(block_size == 32, "Block size must be 32 for kernel 4")
+            if (1) {
+                gdim = dim3(h);
+                bdim = dim3(block_size);
+            } else {
+                // gdim = dim3(2, cdiv(h, 2));
+                // bdim = dim3(block_size);
+                // Increases theoretical occupancy but does not increase compute throughput (unclear why).
+                gdim = dim3(cdiv(h, 2));
+                // bdim = dim3(block_size, 2);
+                bdim = dim3(2*block_size);
+            }
+            break;
+        default:
+            TORCH_CHECK(false, "Unsupported kernel number: ", kernel_no);
+    }
 
     TORCH_CHECK(is_power_of_two(block_size), "Block size is expected to be a power of 2. Got ", block_size);
 
-    auto f = [&](auto kf) { kf(
-        blocks, block_size, out.data_ptr<float>(), inp.data_ptr<float>(), h, w, kernel_no); 
-    };
+    launch_softmax_kernel<block_size>(gdim, bdim, out.data_ptr<float>(), inp.data_ptr<float>(), h, w, kernel_no);
 
-    switch(block_size) {
-        case 64:
-            f(launch_softmax_kernel<64>); break;
-        case 128:
-            f(launch_softmax_kernel<128>); break;
-        case 256:
-            f(launch_softmax_kernel<256>); break;
-        case 512:
-            f(launch_softmax_kernel<512>); break;
-        case 1024:
-            f(launch_softmax_kernel<1024>); break;
-        default:
-            TORCH_CHECK(false, "Unsupported block size: ", block_size);
-    }
     return out;
 }
 

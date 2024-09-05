@@ -96,6 +96,20 @@ You can now run ncu simply by prepending `sudo`:
 sudo ncu
 ```
 
+## Performance
+
+I've been using Softmax as a case study for implementing various CUDA optimization techniques. Below are some performance results for Softmax. See `csrc/my_flash_attn/softmax.cu` for the kernels.
+
+Tested on a Nvidia T4 GPU using a g4dn.xlarge EC2 instance.
+
+Softmax perf. on (1024x1024 input):
+
+| Kernel   | Perf  | Description                                                |
+|----------|-------|------------------------------------------------------------|
+| Kernel 1 | 105 µs | Shared memory implementation.                              |
+| Kernel 2 | 71 µs  | Kernel 1 + uses warp-level operations to reduce shared memory usage   |
+| Kernel 3 | 57 µs  | Kernel 2 + float4 instead of float datatypes               |
+
 
 ## Observations
 
@@ -134,6 +148,7 @@ This optimization to the attention mechanism is a big deal because the attention
 - [x] Profile kernels with NCU (eg to see whether an implementation is compute-bound or memory-bound and where things can be improved). Softmax is a good one to try out first.
 - [ ] Integrate with CUTLASS + CuTE (CUTLASS >=3.0)
 - [ ] C++ impl of flash attention
+- [ ] How to unit test device functions??
 - [ ] Look to ncu output for ways to optimize softmax kernel
 - [ ] Write transpose matmul kernel (?)
 - [ ] (optional) Triton implementation

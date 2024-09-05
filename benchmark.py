@@ -33,6 +33,7 @@ def benchmark(f, *args):
 # my_flash_attn_cuda = load_and_compile_sources(Path("csrc"), verbose=False)
 
 # n = 5000
+# n = 4096
 n = 1024
 # n = 32
 
@@ -50,11 +51,13 @@ benchmark(my_flash_attn_cuda.my_matmul_cublas, m1, m2)
 
 # Benchmark softmax
 print(f"\nBenchmarking softmax kernel 1 ({n}x{n})...")
-# x = torch.randn(n, n, device="cuda")
 x = torch.randn(n, n, device="cuda")
 benchmark(my_flash_attn_cuda.my_softmax, x, 1)
 
 print(f"\nBenchmarking softmax kernel 2 ({n}x{n})...")
-# x = torch.randn(n, n, device="cuda")
 x = torch.randn(n, n, device="cuda")
 benchmark(my_flash_attn_cuda.my_softmax, x, 2)
+
+print(f"\nBenchmarking softmax kernel 3 ({n}x{n})...")
+x = torch.randn(n, n, device="cuda")
+benchmark(my_flash_attn_cuda.my_softmax, x, 3)

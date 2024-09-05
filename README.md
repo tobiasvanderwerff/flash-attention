@@ -37,6 +37,22 @@ Run benchmark:
 python test_matmul.py
 ```
 
+## Performance
+
+I've been using Softmax as a case study for implementing various CUDA optimization techniques. Below are some performance results for Softmax. See `csrc/my_flash_attn/softmax.cu` for the kernels.
+
+Tested on a Nvidia T4 GPU using a g4dn.xlarge EC2 instance.
+
+Softmax perf. on (1024x1024 input):
+
+| Kernel   | Perf  | Description                                                |
+|----------|-------|------------------------------------------------------------|
+| Kernel 1 | 105 µs | Shared memory implementation.                              |
+| Kernel 2 | 71 µs  | Kernel 1 + uses warp-level operations to reduce shared memory usage   |
+| Kernel 3 | 57 µs  | Kernel 2 + float4 instead of float datatypes               |
+
+
+
 ## Profiling kernels
 
 In order to hone in on the actual performance of the CUDA kernels, the best approach is perhaps to use the `ncu` profiler (see [running ncu profiler](#running-ncu-profiler) section below if you want to run `ncu` on a cloud GPU instance). I found it easiest to profile the pytest test cases set up in `test_attention.py`. For example, if I want to profile the softmax kernel, I run:
@@ -95,21 +111,6 @@ You can now run ncu simply by prepending `sudo`:
 ```shell
 sudo ncu
 ```
-
-## Performance
-
-I've been using Softmax as a case study for implementing various CUDA optimization techniques. Below are some performance results for Softmax. See `csrc/my_flash_attn/softmax.cu` for the kernels.
-
-Tested on a Nvidia T4 GPU using a g4dn.xlarge EC2 instance.
-
-Softmax perf. on (1024x1024 input):
-
-| Kernel   | Perf  | Description                                                |
-|----------|-------|------------------------------------------------------------|
-| Kernel 1 | 105 µs | Shared memory implementation.                              |
-| Kernel 2 | 71 µs  | Kernel 1 + uses warp-level operations to reduce shared memory usage   |
-| Kernel 3 | 57 µs  | Kernel 2 + float4 instead of float datatypes               |
-
 
 ## Observations
 

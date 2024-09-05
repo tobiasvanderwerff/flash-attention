@@ -113,15 +113,17 @@ torch::Tensor my_softmax(const torch::Tensor& inp, int kernel_no = 1) {
     int w = inp.size(1);
     auto out = torch::zeros({h, w}, inp.options());
 
-    if (kernel_no == 3)
-        TORCH_CHECK(w % 4 == 0, "Input size must be a multiple of 4 for kernel 3")
-
     // For better occupancy on matrices with smaller rows, it would probably be
     // best to choose the block size to be the next power of 2 from the matrix
     // width.
-    const int block_size = 128;
-    // const int block_size = 1024;
+    // const int block_size = 128;
+    const int block_size = 1024;
     const int blocks = h;
+
+    if (kernel_no == 2)
+        TORCH_CHECK(block_size == 1024, "Block size must be 1024 for kernel 2")
+    if (kernel_no == 3)
+        TORCH_CHECK(w % 4 == 0, "Input size must be a multiple of 4 for kernel 3")
 
     TORCH_CHECK(is_power_of_two(block_size), "Block size is expected to be a power of 2. Got ", block_size);
 

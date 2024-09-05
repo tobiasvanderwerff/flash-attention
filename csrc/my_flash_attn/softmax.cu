@@ -37,26 +37,6 @@ __global__ void softmax_kernel_1(float* out, const float* inp, int h, int w) {
 
         max_val = fmaxf(max_val, shm[0]);
     }
-    return max_val;
-}
-
-template <int BLOCK_SIZE>
-__global__ void softmax_kernel_1(float* out, const float* inp, int h, int w) {
-    /* Softmax applied row-wise. 
-
-    softmax(x) = exp(x) / sum(exp(x))
-    
-    In this kernel, each block handles a single row.
-    */
-
-    __shared__ float shm[BLOCK_SIZE];
-
-    const int tx = threadIdx.x;
-    const int bx = blockIdx.x;
-
-    // Calculate max value of the row
-    float max_val = compute_row_max<BLOCK_SIZE>(inp, shm, w);
->>>>>>> a56f19099bbdc6fefe5434bc14d3957b5668bcd6
 
     float sum = 0.0f;
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening

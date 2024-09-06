@@ -139,7 +139,7 @@ def test_softmax_kernel(h, w):
     x = torch.randn(h, w, device="cuda", dtype=torch.float32)
     # out = _softmax(x)
     # print(x.max(dim=1)[0][0])
-    out = my_flash_attn_cuda.my_softmax(x, 4)
+    out = my_flash_attn_cuda.my_softmax(x, 5)
     out_pt = torch.nn.functional.softmax(x, dim=1)
 
     assert (out >= 0).all().item()

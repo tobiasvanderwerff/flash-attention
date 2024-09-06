@@ -59,8 +59,11 @@ benchmark(my_flash_attn_cuda.my_softmax, x, 1)
 # print(f"\nBenchmarking softmax kernel 2 ({n}x{n})...")
 # benchmark(my_flash_attn_cuda.my_softmax, x, 2)
 
-print(f"\nBenchmarking softmax kernel 3 ({n}x{n})...")
-benchmark(my_flash_attn_cuda.my_softmax, x, 3)
+# print(f"\nBenchmarking softmax kernel 3 ({n}x{n})...")
+# benchmark(my_flash_attn_cuda.my_softmax, x, 3)
 
-print(f"\nBenchmarking softmax kernel 4 ({n}x{n})...")
-benchmark(my_flash_attn_cuda.my_softmax, x, 4)
+# print(f"\nBenchmarking softmax kernel 4 ({n}x{n})...")
+# benchmark(my_flash_attn_cuda.my_softmax, x, 4)
+
+print(f"\nBenchmarking softmax kernel 5 ({n}x{n})...")
+benchmark(my_flash_attn_cuda.my_softmax, x, 5)

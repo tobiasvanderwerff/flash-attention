@@ -1,7 +1,16 @@
+/*
+
+References for softmax:
+- https://github.com/facebookincubator/AITemplate/wiki/How-to-write-a-fast-Softmax-CUDA-kernel%3F
+- https://oneflow2020.medium.com/how-to-implement-an-efficient-softmax-cuda-kernel-oneflow-performance-optimization-sharing-405ad56e9031
+	- Mainly interesting for the code samples, which are quite optimized. They are hard to read though, because they are meant to be quite generic implementations of softmax.
+*/
+
 #include <iostream>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAException.h>
+#include <cub/cub.cuh>
 
 
 constexpr int WARP_SIZE = 32;
@@ -95,8 +104,13 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
     It reduces 2 times per block using size 32 warps (32*32=1024, which is assumed to be max block size)
 
     Inspiration:
-    - https://github.com/facebookincubator/AITemplate/wiki/How-to-write-a-fast-Softmax-CUDA-kernel%3F
     - https://developer.nvidia.com/blog/register-cache-warp-cuda/
+
+    NB: be careful with register spilling (e.g. 25 int registers for a single
+    thread is pushing it). Quote from the link:
+    > The efficiency of the register cache is predicated on the availability of
+    > spare registers. Otherwise, registers start spilling to global memory,
+    > leading to a dramatic performance drop.
     */
 
     __shared__ float shm[WARP_SIZE];
@@ -192,16 +206,6 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
     non-determinism of floating point arithmetic is somehow more problematic for
     that particular block size, but I'm not sure what it is about the kernel
     that makes it more sensitive to this.
-    
-    Inspiration:
-    - https://github.com/facebookincubator/AITemplate/wiki/How-to-write-a-fast-Softmax-CUDA-kernel%3F
-    - https://developer.nvidia.com/blog/register-cache-warp-cuda/
-
-    NB: be careful with register spilling (e.g. 25 int registers for a single
-    thread is pushing it). Quote from second link:
-    > The efficiency of the register cache is predicated on the availability of
-    > spare registers. Otherwise, registers start spilling to global memory,
-    > leading to a dramatic performance drop.
     */
 
     constexpr int num_warps = BLOCK_SIZE / WARP_SIZE;
@@ -214,7 +218,7 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
     const int warp_no = tx / WARP_SIZE;
     const int lane = tx % WARP_SIZE;
 
-    assert(warp_no < num_warps);
+    static_assert(num_warps <= 32);
 
     // Calculate max value of the row
     float max_val[1] = {-INFINITY};
@@ -320,19 +324,9 @@ template <int BLOCK_SIZE>
 __global__ void softmax_kernel_4(float4* out, const float4* inp, int h, int w) {
     /* Softmax applied row-wise. 
 
+    Same as kernel 3 but omits shared memory.
+
     Note: row size must be a factor of 4.
-
-    - Replaces shared memory with warp-level shuffles.
-    - Uses packed data structures (float4 instead of float).
-
-    Inspiration:
-    - https://github.com/facebookincubator/AITemplate/wiki/How-to-write-a-fast-Softmax-CUDA-kernel%3F
-    - https://developer.nvidia.com/blog/register-cache-warp-cuda/
-
-    NB: be careful with register spilling (e.g. 25 int registers for a single thread is pushing it). Quote from second link:
-    > The efficiency of the register cache is predicated on the availability of
-    > spare registers. Otherwise, registers start spilling to global memory,
-    > leading to a dramatic performance drop.
     */
 
     const int tx = threadIdx.x;
@@ -397,6 +391,62 @@ __global__ void softmax_kernel_4(float4* out, const float4* inp, int h, int w) {
     }
 }
 
+template <int BLOCK_SIZE>
+__global__ void softmax_kernel_5(float* out, const float* inp, int h, int w) {
+    /* Softmax applied row-wise. 
+
+    Same as kernel 1, but uses CUB for block-level reductions.
+    */
+    __shared__ float shm[1];
+
+    using BlockReduce = cub::BlockReduce<float, BLOCK_SIZE>;
+
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    const int tx = threadIdx.x;
+    const int bx = blockIdx.x;
+
+    // Calculate max value of the row
+    float max_val = -INFINITY;
+    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
+        int col = bi*BLOCK_SIZE + tx;
+
+        float val = (col < w) ? inp[bx*w + col] : -INFINITY;
+        float block_max = BlockReduce(temp_storage).Reduce(val, cub::Max());
+        max_val = max(max_val, block_max);
+    }
+
+    // TODO: is there a better way to distribute the reduce result to the other threads?
+    if (tx == 0) shm[0] = max_val;
+    __syncthreads();
+    max_val = shm[0];
+
+    float sum = 0.0f;
+    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
+        // Calculate exponent element-wise
+        int idx = bx*w + bi*BLOCK_SIZE + tx;
+        float val = 0.0f;
+        if (bi*BLOCK_SIZE + tx < w) {
+            float e = exp(inp[idx] - max_val);
+            out[idx] = e;
+            val = e;
+        } 
+
+        sum += BlockReduce(temp_storage).Sum(val);
+    }
+
+    // TODO: is there a better way to distribute the reduce result to the other threads?
+    if (tx == 0) shm[0] = sum;
+    __syncthreads();
+    sum = shm[0];
+
+    // Divide by exponent sum
+    for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
+        if (bi*BLOCK_SIZE + tx < w) 
+            out[bx*w + bi*BLOCK_SIZE + tx] /= sum;
+    }
+}
+
 
 template <int BLOCK_SIZE>
 void launch_softmax_kernel(dim3 gdim, dim3 bdim, float* out, float* inp, int h, int w, int kernel_no) { 
@@ -413,6 +463,8 @@ void launch_softmax_kernel(dim3 gdim, dim3 bdim, float* out, float* inp, int h, 
             softmax_kernel_4<BLOCK_SIZE><<<gdim, bdim>>>(
                 reinterpret_cast<float4*>(out), reinterpret_cast<float4*>(inp), h, w); 
             break;
+        case 5:
+            softmax_kernel_5<BLOCK_SIZE><<<gdim, bdim>>>(out, inp, h, w); break;
         default:
             return;
     }

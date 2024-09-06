@@ -150,6 +150,10 @@ torch::Tensor my_softmax(const torch::Tensor& inp, int kernel_no = 1) {
                 bdim = dim3(2*block_size);
             }
             break;
+        case 5:
+            gdim = dim3(h);
+            bdim = dim3(block_size);
+            break;
         default:
             TORCH_CHECK(false, "Unsupported kernel number: ", kernel_no);
     }

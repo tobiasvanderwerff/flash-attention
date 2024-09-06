@@ -102,9 +102,10 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
     __shared__ float shm[WARP_SIZE];
 
     const int tx = threadIdx.x;
-    const int bx = blockIdx.x;
+    const int row = blockIdx.x;
+    const int row_offset = row * w;
     const int warp_no = tx / WARP_SIZE;
-    const int warp_idx = tx % WARP_SIZE;  // warp_idx == lane
+    const int lane = tx % WARP_SIZE;
 
     // Calculate max value of the row
     float max_val[1] = {-INFINITY};
@@ -112,21 +113,21 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
         int col = bi*BLOCK_SIZE + tx;
 
         // warpSize=32, block size 1024
-        const float val = (col < w) ? inp[bx*w + col] : -INFINITY;
+        const float val = (col < w) ? inp[row_offset + col] : -INFINITY;
 
         *max_val = max(*max_val, val);
 
         warp_reduce_max(max_val);
 
         // Load warp results into warp 0
-        if (warp_idx == 0)
+        if (lane == 0)
             shm[warp_no] = *max_val;
 
         __syncthreads();
 
         // Final reduction happens in warp 0
         if (warp_no == 0) {
-            *max_val = shm[warp_idx];
+            *max_val = shm[lane];
             warp_reduce_max(max_val);
             if (tx == 0)
                 shm[0] = *max_val;
@@ -141,7 +142,7 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
         // Calculate exponent element-wise
         int col = bi*BLOCK_SIZE + tx;
-        int idx = bx*w + col;
+        int idx = row_offset + col;
         const float inp_exp = (col < w) ? exp(inp[idx] - *max_val) : 0;
         if (col < w) out[idx] = inp_exp;
 
@@ -150,13 +151,13 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
 
         warp_reduce_sum<float>(block_sum);
 
-        if (warp_idx == 0) 
+        if (lane == 0) 
             shm[warp_no] = *block_sum;
 
         __syncthreads();
 
         if (warp_no == 0) {
-            *block_sum = shm[warp_idx];
+            *block_sum = shm[lane];
             warp_reduce_sum<float>(block_sum);
             if (tx == 0)
                 shm[0] = *block_sum;
@@ -170,7 +171,7 @@ __global__ void softmax_kernel_2(float* out, const float* inp, int h, int w) {
     // Divide by exponent sum
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
         if (bi*BLOCK_SIZE + tx < w) 
-            out[bx*w + bi*BLOCK_SIZE + tx] /= sum;
+            out[row_offset + bi*BLOCK_SIZE + tx] /= sum;
     }
 }
 
@@ -180,14 +181,24 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
 
     Note: row size must be a factor of 4.
 
-    - Replaces shared memory with warp-level shuffles.
+    - Uses a combination of shared memory and warp-level shuffles.
     - Uses packed data structures (float4 instead of float).
 
+    It should be noted that for some reason, this kernel seems to produce
+    incorrect results more often when a block size of 128 is used (NB: mostly
+    when the `--use_fast_math` compiler flag is turned on). On the same input,
+    it sometimes produces correct results and sometimes incorrect results. This
+    is not the case for block sizes of 32 and 1024. My best guess is that the
+    non-determinism of floating point arithmetic is somehow more problematic for
+    that particular block size, but I'm not sure what it is about the kernel
+    that makes it more sensitive to this.
+    
     Inspiration:
     - https://github.com/facebookincubator/AITemplate/wiki/How-to-write-a-fast-Softmax-CUDA-kernel%3F
     - https://developer.nvidia.com/blog/register-cache-warp-cuda/
 
-    NB: be careful with register spilling (e.g. 25 int registers for a single thread is pushing it). Quote from second link:
+    NB: be careful with register spilling (e.g. 25 int registers for a single
+    thread is pushing it). Quote from second link:
     > The efficiency of the register cache is predicated on the availability of
     > spare registers. Otherwise, registers start spilling to global memory,
     > leading to a dramatic performance drop.
@@ -198,9 +209,10 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
     __shared__ float shm[num_warps];
 
     const int tx = threadIdx.x;
-    const int bx = blockIdx.x;
+    const int row = blockIdx.x;
+    const int row_offset = row * (w/4);
     const int warp_no = tx / WARP_SIZE;
-    const int warp_idx = tx % WARP_SIZE;
+    const int lane = tx % WARP_SIZE;
 
     assert(warp_no < num_warps);
 
@@ -210,21 +222,21 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
         int col = bi*BLOCK_SIZE + tx;
 
         // warpSize=32, block size 1024
-        const float4 val = (col < w/4) ? inp[bx*(w/4) + col] : make_float4(-INFINITY, -INFINITY, -INFINITY, -INFINITY);
+        const float4 val = (col < w/4) ? inp[row_offset + col] : make_float4(-INFINITY, -INFINITY, -INFINITY, -INFINITY);
 
         *max_val = max(*max_val, max(max(val.w, val.x), max(val.y, val.z)));
 
         warp_reduce_max(max_val);
 
         // Load all warp results into shmem
-        if (warp_idx == 0)
+        if (lane == 0)
             shm[warp_no] = *max_val;
 
         __syncthreads();
 
         // Final reduction happens in warp 0
         if (warp_no == 0) {
-            *max_val = (warp_idx < num_warps) ? shm[warp_idx] : -INFINITY;
+            *max_val = (lane < num_warps) ? shm[lane] : -INFINITY;
             warp_reduce_max(max_val);
             if (tx == 0)
                 shm[0] = *max_val;
@@ -232,14 +244,14 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
         __syncthreads();
 
         *max_val = shm[0];
-        // if (tx == 0 && bx == 0) printf("Max val: %f\n", *max_val);
     }
+    // if (tx == 0 && row == 113) printf("\nMax val: %f\n", *max_val);
 
     float sum = 0.0f;
     for (int bi = 0; bi < cdiv(w/4, BLOCK_SIZE); ++bi) { // Thread coarsening
         // Calculate exponents element-wise
         int col = bi*BLOCK_SIZE + tx;
-        int idx = bx*(w/4) + col;
+        int idx = row_offset + col;
         float4 sum4 = {0.0f, 0.0f, 0.0f, 0.0f};
         if (col < w/4) {
             float4 val = inp[idx];
@@ -256,13 +268,13 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
 
         warp_reduce_sum<float>(block_sum);
 
-        if (warp_idx == 0) 
+        if (lane == 0) 
             shm[warp_no] = *block_sum;
 
         __syncthreads();
 
         if (warp_no == 0) {
-            *block_sum = (warp_idx < num_warps) ? shm[warp_idx] : 0.0f;
+            *block_sum = (lane < num_warps) ? shm[lane] : 0.0f;
             warp_reduce_sum<float>(block_sum);
             if (tx == 0)
                 shm[0] = *block_sum;
@@ -272,11 +284,20 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
 
         sum += shm[0];
     }
+    // if (tx == 0 && row == 113) printf("\nSum: %f\n", sum);
 
+    // if (tx == 0 && row == 0) {
+    //     // Print some values
+    //     printf("\n");
+    //     printf("Before division by sum\n");
+    //     for (int i = 0; i < 4; ++i) {
+    //         printf("out[%d]: %f %f %f %f\n", i, out[i].x, out[i].y, out[i].z, out[i].w);
+    //     }
+    // }
     // Divide by exponent sum
     for (int bi = 0; bi < cdiv(w/4, BLOCK_SIZE); ++bi) { // Thread coarsening
         if (bi*BLOCK_SIZE + tx < w/4) {
-            int idx = bx*(w/4) + bi*BLOCK_SIZE + tx;
+            int idx = row_offset + bi*BLOCK_SIZE + tx;
             float4 val = out[idx];
             val.x /= sum;
             val.y /= sum;
@@ -285,6 +306,14 @@ __global__ void softmax_kernel_3(float4* out, const float4* inp, int h, int w) {
             out[idx] = val;
         }
     }
+    // if (tx == 0 && row == 0) {
+    //     // Print some values
+    //     printf("\n");
+    //     printf("After division by sum\n");
+    //     for (int i = 0; i < 4; ++i) {
+    //         printf("out[%d]: %f %f %f %f\n", i, out[i].x, out[i].y, out[i].z, out[i].w);
+    //     }
+    // }
 }
 
 template <int BLOCK_SIZE>

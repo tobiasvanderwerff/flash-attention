@@ -3,9 +3,6 @@
 import sys
 import warnings
 import os
-import re
-import ast
-import glob
 import shutil
 from pathlib import Path
 from packaging.version import parse, Version
@@ -14,14 +11,9 @@ import platform
 from setuptools import setup, find_packages
 import subprocess
 
-import urllib.request
-import urllib.error
-from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
-
 import torch
 from torch.utils.cpp_extension import (
     BuildExtension,
-    CppExtension,
     CUDAExtension,
     CUDA_HOME,
 )
@@ -129,7 +121,7 @@ ext_modules.append(
                     "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
                     "--expt-relaxed-constexpr",
                     "--expt-extended-lambda",
-                    "--use_fast_math",
+                    # "--use_fast_math",  # faster but less accurate
                     # "--ptxas-options=-v",
                     # "--ptxas-options=-O2",
                     # "-lineinfo",

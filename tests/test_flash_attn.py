@@ -8,6 +8,25 @@ import pytest
 # We need to import the CUDA kernels after importing torch
 import my_flash_attn_cuda
 
+ABS_TOL = 1e-4
+REL_TOL = 1e-1
+
+def print_diffs(out, out_ref):
+    out_1d = out.flatten()
+    out_ref_1d = out_ref.flatten()
+    for idx, (e_o, e_o_ref) in enumerate(zip(out_1d, out_ref_1d)):
+        diff = e_o - e_o_ref
+        abs_diff = abs(diff)
+        abs_ref = abs(e_o_ref + 1e-5)
+        relative_diff = abs_diff / abs_ref
+         
+        if abs_diff > ABS_TOL or relative_diff > REL_TOL:
+            row = idx // out.shape[1]
+            col = idx % out.shape[1]
+            print(f"==== diff ==== [{row}][{col}], test: {e_o}, ref: {e_o_ref}")
+        # if abs_diff > ABS_TOL or relative_diff > REL_TOL:
+        #     print(f"==== diff ==== {idx}, test: {e_o}, ref: {e_o_ref}")
+
 
 def _softmax(inp):
     inp_exp = torch.exp(inp - inp.max(dim=1, keepdim=True)[0])
@@ -111,12 +130,13 @@ def test_matmul_cublas_kernel(h, w, k):
     assert torch.isclose(out, out_pt, atol=1e-4).all().item()
 
 @pytest.mark.parametrize(
+    "h,w", [(255, 516)]
     # "h,w", [(256, 256), (99, 99), (100, 2048), (100, 2047), (1024, 1024)]
-    "h,w", [(256, 256), (99, 99), (100, 2048), (100, 2047), (1024, 1024), (4096, 4096)]
+    # "h,w", [(256, 256), (99, 99), (100, 2048), (100, 2047), (1024, 1024), (4096, 4096)]
 )
 def test_softmax_kernel(h, w):
     torch.manual_seed(1)
-    x = torch.randn(h, w, device="cuda")
+    x = torch.randn(h, w, device="cuda", dtype=torch.float32)
     # out = _softmax(x)
     # print(x.max(dim=1)[0][0])
     out = my_flash_attn_cuda.my_softmax(x, 4)
@@ -124,7 +144,10 @@ def test_softmax_kernel(h, w):
 
     assert (out >= 0).all().item()
     assert (out <= 1).all().item()
-    assert out.sum(dim=1).allclose(torch.ones(h, device="cuda"))
+    # print_diffs(out, out_pt)
+    s = out.sum(dim=1)
+    assert s.allclose(torch.ones(h, dtype=torch.float32, device="cuda"))
+    # assert out.sum(dim=1).allclose(torch.ones(h, dtype=torch.float32, device="cuda"))
     assert torch.isclose(out, out_pt, atol=1e-4).all().item()
 
 

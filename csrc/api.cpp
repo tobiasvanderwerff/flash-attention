@@ -113,12 +113,17 @@ torch::Tensor my_softmax(const torch::Tensor& inp, int kernel_no = 1) {
     int w = inp.size(1);
     auto out = torch::zeros({h, w}, inp.options());
 
-    // constexpr int block_size = 1024;
+    constexpr int block_size = 1024;
     // constexpr int block_size = 128;
-    constexpr int block_size = 32;
+    // constexpr int block_size = 64;
+    // constexpr int block_size = 32;
 
     dim3 gdim, bdim;
     switch (kernel_no) {
+        case 1:
+            gdim = dim3(h);
+            bdim = dim3(block_size);
+            break;
         case 2:
             gdim = dim3(h);
             bdim = dim3(block_size);
@@ -127,6 +132,7 @@ torch::Tensor my_softmax(const torch::Tensor& inp, int kernel_no = 1) {
         case 3:
             gdim = dim3(h);
             bdim = dim3(block_size);
+            TORCH_CHECK(block_size != 128, "Block size 128 produces unstable results for this kernel")
             TORCH_CHECK(w % 4 == 0, "Input size must be a multiple of 4 for kernel 3")
             TORCH_CHECK(block_size % 32 == 0, "Block size must be a multiple of 32 for kernel 3")
             break;

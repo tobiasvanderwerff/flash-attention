@@ -391,6 +391,17 @@ __global__ void softmax_kernel_4(float4* out, const float4* inp, int h, int w) {
     }
 }
 
+template<template<typename> typename ReductionOp, typename T, int block_size>
+__inline__ __device__ T BlockAllReduce(T val) {
+    using BlockReduce = cub::BlockReduce<T, block_size>;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+    __shared__ T result_broadcast;
+    T result = BlockReduce(temp_storage).Reduce(val, ReductionOp<T>());
+    if (threadIdx.x == 0) { result_broadcast = result; }
+    __syncthreads();
+    return result_broadcast;
+}
+
 template <int BLOCK_SIZE>
 __global__ void softmax_kernel_5(float* out, const float* inp, int h, int w) {
     /* Softmax applied row-wise. 
@@ -403,13 +414,13 @@ __global__ void softmax_kernel_5(float* out, const float* inp, int h, int w) {
     __shared__ float shm;
 
     const int tx = threadIdx.x;
-    const int bx = blockIdx.x;
+    const int row_offset = blockIdx.x * w;
 
     // Calculate max value of the row
     float max_val = -INFINITY;
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
         int col = bi*BLOCK_SIZE + tx;
-        float val = (col < w) ? inp[bx*w + col] : -INFINITY;
+        float val = (col < w) ? inp[row_offset + col] : -INFINITY;
         float block_max = BlockReduce(temp_storage).Reduce(val, cub::Max());
         max_val = max(max_val, block_max);
     }
@@ -422,7 +433,7 @@ __global__ void softmax_kernel_5(float* out, const float* inp, int h, int w) {
     // Calculate sum of the row
     float sum = 0.0f;
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
-        int idx = bx*w + bi*BLOCK_SIZE + tx;
+        int idx = row_offset + bi*BLOCK_SIZE + tx;
         float val = 0.0f;
         if (bi*BLOCK_SIZE + tx < w) {
             float e = exp(inp[idx] - max_val);
@@ -440,7 +451,7 @@ __global__ void softmax_kernel_5(float* out, const float* inp, int h, int w) {
     // Divide by exponent sum
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
         if (bi*BLOCK_SIZE + tx < w) 
-            out[bx*w + bi*BLOCK_SIZE + tx] /= sum;
+            out[row_offset + bi*BLOCK_SIZE + tx] /= sum;
     }
 }
 

@@ -54,8 +54,6 @@ Softmax perf. on (1024x1024 input):
 | Kernel 5 | 71 µs  | Same as kernel 1, but uses CUB for block-level reductions  | 128 |
     
 
-
-
 ## Profiling kernels
 
 In order to hone in on the actual performance of the CUDA kernels, the best approach is perhaps to use the `ncu` profiler (see [running ncu profiler](#running-ncu-profiler) section below if you want to run `ncu` on a cloud GPU instance). I found it easiest to profile the pytest test cases set up in `test_attention.py`. For example, if I want to profile the softmax kernel, I run:

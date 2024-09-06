@@ -45,12 +45,14 @@ Tested on a Nvidia T4 GPU using a g4dn.xlarge EC2 instance.
 
 Softmax perf. on (1024x1024 input):
 
-| Kernel   | Perf  | Description                                                |
-|----------|-------|------------------------------------------------------------|
-| Kernel 1 | 105 µs | Shared memory implementation.                              |
-| Kernel 2 | 71 µs  | Kernel 1 + uses warp-level operations to reduce shared memory usage   |
-| Kernel 3 | 57 µs  | Kernel 2 + float4 instead of float datatypes               |
-| Kernel 4 | 68 µs  | Kernel 3 but with no shared memory and size 32 block sizes |
+| Kernel   | Perf  | Description                                                | Block size |
+|----------|-------|------------------------------------------------------------|------------|
+| Kernel 1 | 110 µs | Shared memory implementation                               | 128       |
+| Kernel 2 | 85 µs  | Kernel 1 + uses warp-level operations to reduce shared memory usage   | 1024 |
+| Kernel 3 | 73 µs  | Kernel 2 + float4 instead of float datatypes               | 32 |
+| Kernel 4 | 72 µs  | Kernel 3 but with no shared memory and size 32 block sizes | 32 |
+| Kernel 5 | 71 µs  | Same as kernel 1, but uses CUB for block-level reductions  | 128 |
+    
 
 
 

@@ -54,16 +54,31 @@ x = torch.randn(n, n, device="cuda")
 
 # Benchmark softmax
 print(f"\nBenchmarking softmax kernel 1 ({n}x{n})...")
-benchmark(my_flash_attn_cuda.my_softmax, x, 1)
+try:
+    benchmark(my_flash_attn_cuda.my_softmax, x, 1)
+except RuntimeError as e:
+    print(e)
 
-# print(f"\nBenchmarking softmax kernel 2 ({n}x{n})...")
-# benchmark(my_flash_attn_cuda.my_softmax, x, 2)
+print(f"\nBenchmarking softmax kernel 2 ({n}x{n})...")
+try:
+    benchmark(my_flash_attn_cuda.my_softmax, x, 2)
+except RuntimeError as e:
+    print(e)
 
-# print(f"\nBenchmarking softmax kernel 3 ({n}x{n})...")
-# benchmark(my_flash_attn_cuda.my_softmax, x, 3)
+print(f"\nBenchmarking softmax kernel 3 ({n}x{n})...")
+try:
+    benchmark(my_flash_attn_cuda.my_softmax, x, 3)
+except RuntimeError as e:
+    print(e)
 
-# print(f"\nBenchmarking softmax kernel 4 ({n}x{n})...")
-# benchmark(my_flash_attn_cuda.my_softmax, x, 4)
+print(f"\nBenchmarking softmax kernel 4 ({n}x{n})...")
+try:
+    benchmark(my_flash_attn_cuda.my_softmax, x, 4)
+except RuntimeError as e:
+    print(e)
 
 print(f"\nBenchmarking softmax kernel 5 ({n}x{n})...")
-benchmark(my_flash_attn_cuda.my_softmax, x, 5)
+try:
+    benchmark(my_flash_attn_cuda.my_softmax, x, 5)
+except RuntimeError as e:
+    print(e)

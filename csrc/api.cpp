@@ -113,8 +113,8 @@ torch::Tensor my_softmax(const torch::Tensor& inp, int kernel_no = 1) {
     int w = inp.size(1);
     auto out = torch::zeros({h, w}, inp.options());
 
-    constexpr int block_size = 1024;
-    // constexpr int block_size = 128;
+    // constexpr int block_size = 1024;
+    constexpr int block_size = 128;
     // constexpr int block_size = 64;
     // constexpr int block_size = 32;
 

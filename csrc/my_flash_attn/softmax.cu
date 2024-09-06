@@ -397,11 +397,10 @@ __global__ void softmax_kernel_5(float* out, const float* inp, int h, int w) {
 
     Same as kernel 1, but uses CUB for block-level reductions.
     */
-    __shared__ float shm[1];
-
     using BlockReduce = cub::BlockReduce<float, BLOCK_SIZE>;
 
     __shared__ typename BlockReduce::TempStorage temp_storage;
+    __shared__ float shm;
 
     const int tx = threadIdx.x;
     const int bx = blockIdx.x;
@@ -410,20 +409,19 @@ __global__ void softmax_kernel_5(float* out, const float* inp, int h, int w) {
     float max_val = -INFINITY;
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
         int col = bi*BLOCK_SIZE + tx;
-
         float val = (col < w) ? inp[bx*w + col] : -INFINITY;
         float block_max = BlockReduce(temp_storage).Reduce(val, cub::Max());
         max_val = max(max_val, block_max);
     }
 
-    // TODO: is there a better way to distribute the reduce result to the other threads?
-    if (tx == 0) shm[0] = max_val;
+    // Distribute result
+    if (tx == 0) shm = max_val;
     __syncthreads();
-    max_val = shm[0];
+    max_val = shm;
 
+    // Calculate sum of the row
     float sum = 0.0f;
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening
-        // Calculate exponent element-wise
         int idx = bx*w + bi*BLOCK_SIZE + tx;
         float val = 0.0f;
         if (bi*BLOCK_SIZE + tx < w) {
@@ -431,14 +429,13 @@ __global__ void softmax_kernel_5(float* out, const float* inp, int h, int w) {
             out[idx] = e;
             val = e;
         } 
-
         sum += BlockReduce(temp_storage).Sum(val);
     }
 
-    // TODO: is there a better way to distribute the reduce result to the other threads?
-    if (tx == 0) shm[0] = sum;
+    // Distribute result
+    if (tx == 0) shm = sum;
     __syncthreads();
-    sum = shm[0];
+    sum = shm;
 
     // Divide by exponent sum
     for (int bi = 0; bi < cdiv(w, BLOCK_SIZE); ++bi) { // Thread coarsening

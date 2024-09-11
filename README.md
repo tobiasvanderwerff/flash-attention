@@ -153,10 +153,11 @@ This optimization to the attention mechanism is a big deal because the attention
 - [x] Set up NCU/(Nsight?) profiling on Lightning Studio 
 - [x] Profile kernels with NCU (eg to see whether an implementation is compute-bound or memory-bound and where things can be improved). Softmax is a good one to try out first.
 - [x] Integrate with CUTLASS + CuTE (CUTLASS >=3.0)
-- [ ] C++ impl of flash attention
+- [x] Try out CUTLASS [sgemm_1.cu](https://github.com/NVIDIA/cutlass/blob/main/examples/cute/tutorial/sgemm_1.cu) example and compare perf to my custom matmul (result: 50 ms vs 300 ms, but latter includes launch overhead)
+- [ ] Look to ncu output for ways to further optimize softmax kernel
+- [ ] C++ impl of flash attention using CUTLASS
+- [ ] Instead of measuring time manually using `benchmark.py`, run `sudo ncu python benchmark.py | grep -i duration`. This should give the actual CUDA runtime for each kernel.
 - [ ] How to unit test device functions??
-- [ ] Look to ncu output for ways to optimize softmax kernel
-- [ ] Write transpose matmul kernel (?)
 - [ ] (optional) Triton implementation
 - [ ] (optional): try out using CUDA with Docker for potentially easier dependency management: https://github.com/pbridger/cuda-experiments/blob/main/Dockerfile 
 
